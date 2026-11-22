@@ -1,0 +1,107 @@
+# Acceptance test set — see .claude/docs/eval.md for how each field is scored.
+# Default as_of for every item: 2026-11-22 (fixed so results are stable). Override per item with `as_of`.
+# expect.status: answered | partial | conflict | abstained
+# must_cite: clause_ids that must be cited by >= 1 displayed claim (or disagreement side, for conflict items)
+# values: strings whose normalised value must appear in displayed claims / disagreement quotes / calc result
+# conflict_subjects: subjects that must appear in `disagreements`
+# chain: expected version chain (clause_ids in order) in `chains`
+
+defaults:
+  as_of: "2026-11-22"
+
+items:
+  # ---------- single fact (8)
+  - {id: q01, type: single, question: "What is the interest rate on the personal loan?",
+     expect: {status: answered, must_cite: ["D1:5.1"], values: ["13.5%"]}}
+  - {id: q02, type: single, question: "How is interest calculated on the loan?",
+     expect: {status: answered, must_cite: ["D1:5.2"], values: []}}
+  - {id: q03, type: single, question: "On which day of the month is the EMI due?",
+     expect: {status: answered, must_cite: ["D1:6.2"], values: ["5th"]}}
+  - {id: q04, type: single, question: "What loan tenures are available?",
+     expect: {status: answered, must_cite: ["D1:6.1"], values: ["12 to 60 months"]}}
+  - {id: q05, type: single, question: "What is the maximum loan amount?",
+     expect: {status: answered, must_cite: ["D1:2.1"], values: ["₹25,00,000"], conflict_subjects: []}}
+  - {id: q06, type: single, question: "After how many EMIs can I prepay the loan?",
+     expect: {status: answered, must_cite: ["D1:7.1"], values: ["6"]}}
+  - {id: q07, type: single, question: "What is the cheque bounce charge?",
+     expect: {status: answered, must_cite: ["D2:table1.row3"], values: ["₹590"]}}
+  - {id: q08, type: single, question: "Which courts have jurisdiction over the loan agreement?",
+     expect: {status: answered, must_cite: ["D1:10.1"], values: []}}
+
+  # ---------- multi-document (5)
+  - {id: q09, type: multi, question: "What fees apply if I pay an EMI late?",
+     expect: {status: conflict, must_cite: ["D1:8.1", "D2:table1.row2", "D5:1"], conflict_subjects: ["late_payment_fee"]}}
+  - {id: q10, type: multi, question: "What do I pay at disbursement, and what minimum income do I need?",
+     expect: {status: answered, must_cite: ["D2:table1.row1", "D1:3.2"], values: ["2%", "₹25,000"]}}
+  - {id: q11, type: multi, question: "Can penal charges be added to the interest rate?",
+     expect: {status: answered, must_cite: ["D5:2"], values: []}}
+  - {id: q12, type: multi, question: "What must lenders do about their schedules of charges, and from when?",
+     expect: {status: answered, must_cite: ["D5:3"], values: ["1 November 2025"]}}
+  - {id: q13, type: multi, question: "When can I prepay, according to the agreement and the FAQ?",
+     expect: {status: answered, must_cite: ["D1:7.1"], values: ["6"]}}
+
+  # ---------- table (3)
+  - {id: q14, type: table, question: "What is the processing fee?",
+     expect: {status: answered, must_cite: ["D2:table1.row1"], values: ["2%"]}}
+  - {id: q15, type: table, question: "How much does a duplicate statement cost?",
+     expect: {status: answered, must_cite: ["D2:table1.row4"], values: ["₹250"]}}
+  - {id: q16, type: table, question: "What is the loan cancellation charge?",
+     expect: {status: answered, must_cite: ["D2:table1.row5"], values: ["₹1,000"]}}
+
+  # ---------- current rule / amended (5)
+  - {id: q17, type: current_rule, question: "What is the prepayment charge today for a floating-rate loan to an individual?",
+     expect: {status: answered, must_cite: ["D4:1"], values: ["nil"], chain: ["D1:7.2", "D3:1", "D4:1"]}}
+  - {id: q18, type: current_rule, question: "What is the current prepayment charge for a fixed-rate loan?",
+     expect: {status: answered, must_cite: ["D4:1"], values: ["2%"], chain: ["D1:7.2", "D3:1", "D4:1"]}}
+  - {id: q19, type: current_rule, question: "Has clause 7.2 of the loan agreement been amended?",
+     expect: {status: answered, must_cite: ["D4:1"], chain: ["D1:7.2", "D3:1", "D4:1"]}}
+  - {id: q20, type: current_rule, question: "Is the 4% prepayment charge still applicable?",
+     expect: {status: answered, must_cite: ["D4:1"], chain: ["D1:7.2", "D3:1", "D4:1"], forbid_values_in_body: ["4%"]}}
+  - {id: q21, type: current_rule, question: "Which amendment currently governs prepayment charges?",
+     expect: {status: answered, must_cite: ["D4:1"], values: ["1 January 2026"], chain: ["D1:7.2", "D3:1", "D4:1"]}}
+
+  # ---------- as-of date (3)
+  - {id: q22, type: as_of, as_of: "2025-06-01", question: "What is the prepayment charge?",
+     expect: {status: answered, must_cite: ["D3:1"], values: ["3%"], chain: ["D1:7.2", "D3:1", "D4:1"]}}
+  - {id: q23, type: as_of, as_of: "2024-06-01", question: "What is the prepayment charge?",
+     expect: {status: answered, must_cite: ["D1:7.2"], values: ["4%"]}}
+  - {id: q24, type: as_of, as_of: "2025-06-01", question: "What is the late payment fee per instalment?",
+     expect: {status: conflict, must_cite: ["D1:8.1", "D2:table1.row2"], conflict_subjects: ["late_payment_fee"],
+              forbid_cite: ["D5:1"]}}   # D5 not yet effective on 2025-06-01
+
+  # ---------- conflicts (4; q28 is a negative control)
+  - {id: q25, type: conflict, question: "What is the late payment fee per instalment?",
+     expect: {status: conflict, must_cite: ["D1:8.1", "D2:table1.row2", "D5:1"], conflict_subjects: ["late_payment_fee"]}}
+  - {id: q26, type: conflict, question: "What is the maximum age to apply for the personal loan?",
+     expect: {status: conflict, must_cite: ["D1:3.1", "D6:p1.q1"], conflict_subjects: ["borrower_age"]}}
+  - {id: q27, type: conflict, question: "Does the schedule of charges comply with the FCB cap on penal charges?",
+     expect: {status: conflict, must_cite: ["D2:table1.row2", "D5:1"], conflict_subjects: ["late_payment_fee"]}}
+  - {id: q28, type: conflict_negative, question: "What is the minimum age to apply?",
+     expect: {status: answered, values: ["21"], must_cite: ["D1:3.1"]}}
+
+  # ---------- unanswerable (6)
+  - {id: q29, type: unanswerable, question: "What is the foreclosure charge on gold loans?", expect: {status: abstained}}
+  - {id: q30, type: unanswerable, question: "Who is the grievance redressal officer?", expect: {status: abstained}}
+  - {id: q31, type: unanswerable, question: "What is the GST rate on the processing fee?", expect: {status: abstained}}
+  - {id: q32, type: unanswerable, question: "What is the interest rate for fixed-rate loans?", expect: {status: abstained}}
+  - {id: q33, type: unanswerable, question: "What is the late fee on credit card payments?", expect: {status: abstained}}
+  - {id: q34, type: unanswerable, question: "What is Kestrel Finance's customer care phone number?", expect: {status: abstained}}
+
+  # ---------- calculation (3)
+  - {id: q35, type: calc, question: "What would my EMI be on a ₹5,00,000 loan at the agreement's interest rate for 36 months?",
+     expect: {status: answered, must_cite: ["D1:5.1"], calc_result: 16968, calc_tolerance: 1}}
+  - {id: q36, type: calc, as_of: "2025-06-01",
+     question: "What prepayment charge would I pay on an outstanding principal of ₹2,00,000?",
+     expect: {status: answered, must_cite: ["D3:1"], calc_result: 6000, calc_tolerance: 0}}
+  - {id: q37, type: calc, question: "What prepayment charge would I pay today on ₹2,00,000 outstanding on my floating-rate loan?",
+     expect: {status: answered, must_cite: ["D4:1"], calc_result: 0, calc_tolerance: 0}}
+
+  # ---------- scanned (2) — enabled after milestone M9 (OCR)
+  - {id: q38, type: scanned, question: "According to the FAQ, who can apply for the loan?",
+     expect: {status: conflict, must_cite: ["D6:p1.q1"], values: ["21", "60"], conflict_subjects: ["borrower_age"], ocr_badge: true}}
+  - {id: q39, type: scanned, question: "What documents does the FAQ say I need?",
+     expect: {status: answered, must_cite: ["D6:p1.q5"], values: [], ocr_badge: true}}
+
+  # ---------- Hindi (1) — enabled after milestone M10
+  - {id: q40, type: hindi, question: "व्यक्तिगत ऋण पर ब्याज दर क्या है?",
+     expect: {status: answered, must_cite: ["D1:5.1"], values: ["13.5%"], language: hi}}

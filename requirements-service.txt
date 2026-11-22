@@ -1,0 +1,8 @@
+FlagEmbedding
+transformers>=4.44,<5
+torch
+fastapi
+uvicorn
+httpx
+python-dotenv
+datasets<4

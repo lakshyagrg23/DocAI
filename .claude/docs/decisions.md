@@ -1,0 +1,82 @@
+# Decisions (ADR log)
+
+Append new entries at the bottom. Format: ID · date · decision · why · consequences. Never delete; supersede instead.
+
+**ADR-001 · 2026-11-22 · Open-source models only, served by ourselves.** (LLM serving superseded by ADR-011)
+LLM `Qwen/Qwen2.5-7B-Instruct-AWQ` on vLLM. Embeddings `BAAI/bge-m3`. Reranker `BAAI/bge-reranker-v2-m3`.
+NLI verifier `vectara/hallucination_evaluation_model` (HHEM-2.1-open).
+Why: the problem statement forbids paid AI APIs; documents are confidential. Qwen2.5-7B has reliable JSON output and
+reasonable Hindi, and the AWQ build fits a 16 GB T4 next to the small models.
+Fallback: Ollama `qwen2.5:7b-instruct-q4_K_M` behind the same OpenAI-compatible client.
+
+**ADR-002 · 2026-11-22 · Colab is not a serving host.**
+Colab's FAQ disallows web services and connecting to remote proxies on all runtimes, including paid.
+Colab compute units are used for development and batch pre-ingest of the demo corpus only, with the model
+service on localhost inside the notebook.
+
+**ADR-003 · 2026-11-22 · Modal hosts both the GPU model service and the Streamlit UI.**
+Supersedes the PRD's "UI on a Hugging Face Space". Why: one platform and one account; a `modal.Volume` gives persistent
+uploads and chats; T4 is about $0.59/h. Keep `min_containers=1` on both only during the judging window.
+Fallback: HF Space (Docker, CPU) for the UI.
+Caveat: SQLite on a Modal Volume. Run a single UI container and call `volume.commit()` after writes (debounced, at most every 5 s).
+
+**ADR-004 · 2026-11-22 · Three-level data model (clause / span / fact).** See data-model.md.
+
+**ADR-005 · 2026-11-22 · Amendments and contradictions are computed at ingest.**
+Queries do version lookups and a cheap re-check of facts among the retrieved clauses only.
+Incremental: a new document re-runs amendment resolution and the conflict scan only for the subjects and version keys it touches.
+
+**ADR-006 · 2026-11-22 · Extract-then-compose citations.**
+The LLM cites span_ids; the UI renders stored span text. Quotes can't be misquoted by design.
+
+**ADR-007 · 2026-11-22 · Streamlit UI** instead of React. Why: 24-hour budget, Python only. Highlights are drawn onto
+PyMuPDF-rendered page PNGs, so no PDF.js is needed.
+
+**ADR-008 · 2026-11-22 · PyMuPDF for parsing (not Docling)** for speed and exact word coordinates. `page.find_tables()` for tables.
+Docling is a fallback only if table extraction fails on real user PDFs.
+
+**ADR-009 · 2026-11-22 · Faithfulness definition.**
+`passed / drafted × 100`, where passed = spans_valid ∧ numbers_ok ∧ quote_ok ∧ version_ok ∧ hhem ≥ τ.
+Contradicted claims count as passed, because they are backed by a quote; they are shown in the disagreement card, not the body.
+The answer body is 100% verified by construction; the score shows how much of the draft was blocked.
+
+**ADR-010 · 2026-11-22 · Fictional demo corpus** (Kestrel Finance Ltd., Financial Conduct Board) with planted
+conflicts, an amendment chain and a scanned FAQ, so every test has ground truth.
+
+**ADR-011 · 2026-11-23 · Ollama serves the LLM in every environment (supersedes vLLM in ADR-001).**
+Model `qwen2.5:7b-instruct` (Q4_K_M, Ollama tag) with JSON-schema structured output (`format`), `num_ctx` 8192, temperature 0.
+Why: the developer already runs Ollama with a local GPU. The same backend in dev, Colab and Modal means identical
+behaviour and prompts, and no vLLM version or T4 compatibility risk. Throughput is enough for a 6-document corpus.
+The app talks only to our model service (`/llm/chat`), so swapping in vLLM later is a model-service-only change.
+
+**ADR-012 · 2026-11-23 · Dev machine uses `qwen3.5:4b` (Ollama) with thinking disabled; dependency pins.**
+Dev box has an RTX 4050 6 GB and already had `qwen3.5:4b` pulled, so `.env` sets `LLM_MODEL=qwen3.5:4b`, `AUX_DEVICE=cpu`.
+The project default in `core/config.py` stays `qwen2.5:7b-instruct` (prod/Modal and the release eval). It is still an open-source model served by us (constraint 1 holds).
+`llm_backend.py` always sends `"think": false`: Qwen3-series models think by default, which adds latency and breaks determinism and structured output.
+Pins in `requirements-service.txt`: `transformers>=4.44,<5` (FlagEmbedding imports a module removed in v5) and `datasets<4` (newer needs a huggingface_hub that transformers 4.x forbids).
+CPU torch installed from the pytorch CPU index in the dev venv. Consequences: prompts tuned on 4b must be re-checked with 7b before the M8 release eval (eval gates apply to the deployed model); smoke timings on dev are CPU-bound.
+
+**ADR-013 · 2026-11-23 · Build the demo corpus first, guard against overfitting with a held-out set.**
+The corpus and qa.yaml are ground truth for the M2-M6 done-when checks, so they are built in M1 (not after). Overfitting risk lives in code and prompts, so: no demo IDs, names or amounts in `core/` or prompts (unit tests use small synthetic fixtures); a held-out set of 2-3 differently formatted PDFs + Q&A is written but not developed against, and is run at M5, M6 and M8. A drop versus the demo corpus signals overfitting. Consequences: extra corpus work before M8; `/check-constraints` should grep `core/` for demo doc IDs.
+
+**ADR-014 · 2026-11-23 · M4 answering decisions: HHEM threshold, relevance by prompt, normaliser pulled forward.**
+1. `HHEM_THRESHOLD` stays **0.5**. Sweep over the 22 M4 items (single, multi, table, unanswerable; draft prompt v3, `qwen3.5:4b`): items passing are 22/22 for 0.2-0.5 and 21/22 for 0.6-0.8; the lowest legitimate claim scored 0.54, all others 0.89-0.99. Nothing in this set is separated by HHEM (the numbers/quote/span checks and the prompt do the blocking), so the sweep cannot justify moving it; re-run `scripts/eval.py --hhem-sweep` on the 7b release eval and on the held-out set (ADR-013).
+2. Off-topic claims (answering a different question from the same evidence) are controlled by the draft prompt (v3 rules 2, 6, 11, 12), **not** by a relevance score. Measured on real answers: `/rerank` scores of correct multi-part claims (0.11) fall below wrong-topic claims (0.69), so a reranker gate would block good answers. Prompt iteration v1->v3 took the 22 M4 items from 14/22 to 22/22 (v1 invented "From X to Y" periods from the as-of date and header; v2 still answered adjacent topics; v3 added a scope-check rule). Risk: the prompt is tuned on 4b and on this corpus; the held-out set must confirm it.
+3. `core/normalize.py` (planned for M5) was built in M4 because verify check (b) needs `parse_value`/number tokens; M5 reuses it for facts. Number words in the *source* (six) count as numbers; in the *claim* they do not.
+4. Gate detail: the "No verified evidence for: <sub-question>" missing items are only generated when nothing was verified; with some supported claims, only the model's own `missing` list is used (no claim-to-sub-question mapping exists to do better).
+5. Span ids copied with brackets (`[D1:6.1#s1]`) are normalised before check (a); the id must still be in the evidence pack.
+
+**ADR-015 · 2026-11-23 · M5 decisions: two extraction calls, code-side recovery/validation, global version rebuild, planner date guard.**
+1. Fact extraction and amendment-directive extraction are **separate LLM calls** (amendments.md §1 said one call): a 4B model returned empty/incomplete directives when asked for both. Facts are batched by 6 clauses; directives are requested only for amendment documents or clauses matching `AMEND_RX`.
+2. The LLM proposes, code decides. Facts are dropped unless `value_raw` is in the span text and `parse_value` succeeds. Directives are dropped unless their evidence span exists and states the target clause (or supersession wording). A missing `target_path` is recovered from "Clause N" in the evidence only when exactly one distinct reference is present. This was needed on real output: `qwen3.5:4b` returned `target_path: null` for both substitutions.
+3. `AMEND_RX` from the spec never matched "supersession"; fixed. Target resolution additionally requires the target clause to exist in the candidate document and prefers the longer matched name on ties (an amendment's title contains the agreement's reference number, and the schedule lists it as an alias).
+4. `versions.rebuild_all` recomputes every timeline after each document's post-stages instead of per touched key. Corpus is small; ingest order independence is tested for three orders.
+5. Planner guard (`plan.sanitise`): an `as_of_override` is dropped unless the question itself contains a year or month name. Measured failure: the 4B planner invented `2025-08-19` for "today" and the answer cited the superseded 3% rule.
+6. Draft prompt v3 -> v6 (rules 13-15: name amendments with what they do and their date; stay close to the evidence wording; do not list an old value as missing when asked whether it still applies). Verification, not the prompt, is what guarantees safety: in every run unsupported displayed = 0.
+7. Known flaky item: q32 ("interest rate for fixed-rate loans") sometimes yields a partial answer (a prepayment-charge claim plus a `missing` entry) instead of an abstention with the 4B model; abstention recall 5/6 to 6/6 across runs. Re-measure with the 7B model and the held-out set before tuning further (ADR-013).
+
+**ADR-016 · 2026-11-23 · M6 decisions: conflict partners join the evidence; full re-scan; query-time logic in `disagree.py`.**
+1. `disagree.add_partners` adds the spans of the clause on the other side of any conflict in effect to the evidence pack. Contradictions are computed at ingest (constraint 5), so surfacing the other side is a lookup, not a corpus scan. It fixed q27, where retrieval alone never finds `D2:table1.row2`. Risk: a conflicting partner can pull an off-topic claim into an answer; the draft prompt (rule 2) and `asserts_disputed` (only claims that state a disputed value become `contradicted`) limit this, and q28/q05 (negative controls) pass.
+2. The ingest scan re-scans all subjects after every document (spec: only changed subjects). Version intervals of old facts change when a new amendment arrives, ids are deterministic, and the corpus is small.
+3. Check (f) lives in `core/answer/disagree.py`, called by `assemble` after `verify_claims`, to keep `verify.py` free of DB access.
+4. C3 is verified only with synthetic facts until M9 (the scanned FAQ). The milestone's "exactly C1, C2, C3 are stored" is therefore met live for C1, C2 and by unit test for C3.

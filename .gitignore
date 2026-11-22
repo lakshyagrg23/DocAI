@@ -1,0 +1,10 @@
+.venv/
+.env
+data/
+data_prod/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+corpus/pdfs/
+svc.log
