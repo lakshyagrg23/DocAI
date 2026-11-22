@@ -76,6 +76,20 @@ Read: design/ui.md
 **Done when:** a manual run of the demo script (below) works end to end in the browser; two chats keep separate histories after reload.
 **Status: DONE 2026-11-23.** Checked in a real browser (Streamlit on :8501 against the live model service): demo step 1 (conflict card D1 ₹500 · D2 ₹750 · D5 cap ₹600, citation pills, highlighted evidence page), step 2 (nil for floating loans with the D1 -> D3 -> D4 timeline), Conflicts, Amendments and Documents pages, and a full reload restoring the chat. Steps 3-5 and 7 (as-of change, GST abstention, calculator, upload) are covered by the eval items q22/q31 (calculator arrives in M9) and by `tests/test_app.py`, not clicked through in the browser; the OCR citation (step 6) needs M9. Two chats keeping separate histories is tested with AppTest. 168 tests.
 
+### M7b — React UI + API (replaces Streamlit; user request 2026-11-23)
+Read: design/ui-react.md, ADR-017
+- [x] `api/` FastAPI layer + `tests/test_api.py` (chats, SSE ask, enrichment, documents, page image, conflicts, amendments)
+- [x] `web/` scaffold, design system, collapsible sidebar, chat shell, composer, stage stepper
+- [x] answer card (plain-language), citation chips, right panel (Sources / Page with highlight / How we checked)
+- [x] Library, Conflicts, Amendments pages; dark mode; responsive; accessibility; browser checks
+**Done when:** the demo script runs end to end in the React UI against the live model service, tests pass, and the screens read in plain language (design/ui-react.md §3).
+**Status: DONE 2026-11-23 (browser-checked against the live model).** Verified in Chrome on the Vite dev server and on the FastAPI-served build:
+the late-fee question end to end (stage stepper, "Documents disagree" comparison table with readable names, citation chips, side panel Page tab with the
+quote highlighted on the real PDF page, Sources tab, "How we checked" tab), Amendments timeline, Conflicts, Documents, dark and light mode, sidebar chats.
+179 backend tests + 19 front-end tests pass; ruff and `tsc` clean. Not checked in the browser: mobile widths (drawers are implemented but only reasoned about),
+file upload through the Documents page, Hindi, and the remaining demo-script steps (covered by eval and API tests). The Streamlit UI (`app/`) is still in the repo
+as a fallback and is to be removed once the user is satisfied with the React UI.
+
 ### M8 — Deploy (P0 complete)
 Read: architecture.md §Deployment, design/model-service.md §Modal
 - [ ] Deploy the model service to Modal (runbook.md §3); smoke test against its URL

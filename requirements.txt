@@ -16,3 +16,6 @@ pyyaml
 python-ulid
 pytest
 ruff
+fastapi
+uvicorn
+python-multipart

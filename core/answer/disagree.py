@@ -116,6 +116,7 @@ def cards_from_ids(conn: sqlite3.Connection, ids: list[str], as_of: str) -> list
             card["sides"].append({"span_id": f["span_id"], "clause_id": f["clause_id"], "doc": f["doc_id"],
                                   "doc_title": sp["title"] if sp else None, "page": sp["page"] if sp else None,
                                   "status": versions.status(conn, f["clause_id"], as_of), "value": f["value_raw"],
+                                  "op": f["op"], "attribute": f["attribute"], "scope": json.loads(f["scope"] or "{}"),
                                   "text": sp["text"] if sp else None, "ocr": bool(sp and sp["ocr_conf"] is not None)})
     for card in by_subject.values():
         card["explanation"] = " · ".join(card["explanation"])

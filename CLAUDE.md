@@ -47,7 +47,9 @@ add an ADR to `decisions.md` and update the affected doc in the same change.
 ## Repo layout (target)
 
 ```
-app/                     Streamlit UI (main.py + pages/)
+app/                     Streamlit UI (legacy; removed after the React UI reaches parity, ADR-017)
+api/                     FastAPI over core/ (chats, SSE ask, documents, sources, conflicts, amendments)
+web/                     React UI (Vite + TypeScript + Tailwind); `npm run build` -> web/dist, served by api/
 core/
   config.py              all thresholds, paths, env vars
   db.py                  SQLite schema + data access
@@ -75,7 +77,10 @@ ollama pull qwen2.5:7b-instruct            # once, on the dev machine
 python -m model_service.local              # dev: model service on localhost:8080 (uses your running Ollama)
 modal deploy model_service/modal_app.py    # GPU model service on Modal T4
 python scripts/ingest_corpus.py --reset    # ingest corpus/pdfs → DATA_DIR
-streamlit run app/main.py                  # UI on :8501
+streamlit run app/main.py                  # legacy UI on :8501
+uvicorn api.main:app --port 8000           # API (+ built React UI from web/dist on the same port)
+cd web && npm install && npm run dev       # React dev server on :5173 (proxies /api to :8000)
+cd web && npm run build && npm test        # production build, front-end tests
 python scripts/eval.py                     # run tests/qa.yaml, print metrics + gate pass/fail
 pytest -q                                  # unit tests
 modal deploy deploy/modal_app_ui.py        # deploy the UI
