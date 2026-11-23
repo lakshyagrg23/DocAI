@@ -6,7 +6,7 @@
 |---|---|---|---|
 | 1 | **Ollama** | Runs the LLM (`qwen2.5:7b-instruct`) on `localhost:11434` | Yes (or slow on CPU) |
 | 2 | **Model service** (`model_service/`, FastAPI on `:8080`) | One gateway for all model calls: `/llm/chat` (forwards to Ollama), `/embed`, `/rerank`, `/nli` (loads bge-m3, bge-reranker, HHEM itself) | Preferably |
-| 3 | **App** (`app/` + `core/`, Streamlit on `:8501`) | UI, ingest, retrieval, verification, conflicts, versions, SQLite | No |
+| 3 | **App** (`api/` + `web/` + `core/`, on `:8000`) | UI, ingest, retrieval, verification, conflicts, versions, SQLite | No |
 
 The app only knows `MODEL_BASE_URL`. **Dev and production run the same three processes; only the machine changes.**
 
@@ -62,7 +62,7 @@ python -m model_service.local                      # → http://localhost:8080 ;
 python scripts/smoke.py                            # health + 1 LLM call + embed + rerank + nli
 python corpus/generate.py                          # only when corpus spec changes
 python scripts/ingest_corpus.py --reset            # rebuild ./data from corpus/pdfs
-streamlit run app/main.py                          # http://localhost:8501
+uvicorn api.main:app --port 8000                   # http://localhost:8000 (after `cd web && npm run build`)
 python scripts/eval.py --skip-types scanned,hindi  # acceptance tests
 pytest -q
 ```
@@ -128,8 +128,7 @@ modal secret create docai-ui MODEL_BASE_URL=<model url> MODEL_API_KEY=<the secre
 modal deploy deploy/modal_app_ui.py                # prints the public app URL → share this
 ```
 `deploy/modal_app_ui.py`: debian_slim + `apt_install("tesseract-ocr","tesseract-ocr-hin")` + `requirements.txt`;
-Volume `docai-data` at `/data` (`DATA_DIR=/data`); runs `streamlit run app/main.py --server.port 8000 --server.address 0.0.0.0
---server.headless true` under `@modal.web_server(8000)`; a single container (`max_containers=1`, because SQLite).
+Volume `docai-data` at `/data` (`DATA_DIR=/data`); runs `uvicorn api.main:app --host 0.0.0.0 --port 8000` (serving `web/dist`, built into the image) under `@modal.web_server(8000)`; a single container (`max_containers=1`, because SQLite).
 
 ### 3.5 Judging window and cost control
 

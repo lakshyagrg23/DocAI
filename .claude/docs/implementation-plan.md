@@ -4,7 +4,7 @@ Milestones run strictly in order. Each lists the docs to read, the work, and **d
 and log the session in `progress.md`. P0 = M0–M8. Deploy (M8) happens as soon as P0 passes, before any P1 work, so there is
 always a working URL. P1 = M9; P2 = M10.
 
-Dev loop: everything runs on the developer's machine (Ollama + model service + Streamlit), see runbook.md §1.
+Dev loop: everything runs on the developer's machine (Ollama + model service + FastAPI/React), see runbook.md §1.
 Colab is optional for heavy batch runs. Modal is touched only in M8 (deploy).
 
 ---
@@ -67,7 +67,7 @@ Read: design/contradictions.md
 - [x] `core/conflict_rules.py` + unit tests for every comparison row
 - [x] ingest-time scan (incremental) + query-time lookup and re-check; disagreements grouped by subject; status `conflict`
 **Done when:** exactly C1, C2, C3 are stored; eval passes q09, q24–q28 and q05 (no false conflict).
-**Status: DONE 2026-11-23 (C3 and q26 deferred to M9).** Live ingest stores exactly C1 (numeric, 2024-01-15 ->) and C2 (rule, 2025-11-01 ->); C3 (borrower_age, D1:3.1 vs the scanned FAQ D6) cannot exist until D6 is OCR'd (M9) and is covered by synthetic-fact unit tests (differing `{"a":[58],"b":[60]}`, overlap from 2025-06-01). Eval: q05, q09, q24, q25, q27, q28 pass; regression 27/27 on the rest; unsupported displayed 0. 159 tests at M6 close. q26 stays open until D6 exists.
+**Status: DONE 2026-11-23 (C3 and q26 deferred to M9).** Live ingest stores exactly C1 (numeric, 2024-01-15 ->) and C2 (rule, 2025-11-01 ->); C3 (borrower_age, D1:3.1 vs the scanned FAQ D6) cannot exist until D6 is OCR'd (M9) and is covered by synthetic-fact unit tests (differing `{"a":[58],"b":[60]}`, overlap from 2025-06-01). Eval: q05, q09, q24, q25, q27, q28 pass; regression 27/27 on the rest; unsupported displayed 0. 159 tests at M6 close. q26 stays open until D6 exists. **Update (M9, 2026-11-23): D6 is OCR'd and the live corpus now stores exactly C1, C2 and C3.**
 
 ### M7 — UI
 Read: design/ui.md
@@ -87,25 +87,25 @@ Read: design/ui-react.md, ADR-017
 the late-fee question end to end (stage stepper, "Documents disagree" comparison table with readable names, citation chips, side panel Page tab with the
 quote highlighted on the real PDF page, Sources tab, "How we checked" tab), Amendments timeline, Conflicts, Documents, dark and light mode, sidebar chats.
 179 backend tests + 19 front-end tests pass; ruff and `tsc` clean. Not checked in the browser: mobile widths (drawers are implemented but only reasoned about),
-file upload through the Documents page, Hindi, and the remaining demo-script steps (covered by eval and API tests). The Streamlit UI (`app/`) is still in the repo
-as a fallback and is to be removed once the user is satisfied with the React UI.
+file upload through the Documents page, Hindi, and the remaining demo-script steps (covered by eval and API tests). The Streamlit UI (`app/`) was removed on 2026-11-23 after the user approved the React UI (ADR-018).
 
-### M8 — Deploy (P0 complete)
+### M8 — Deploy (P0 complete; now done after M9, ADR-018)
 Read: architecture.md §Deployment, design/model-service.md §Modal
 - [ ] Deploy the model service to Modal (runbook.md §3); smoke test against its URL
 - [ ] Upload the locally ingested `data/` to the Modal Volume (or re-ingest against the Modal service)
-- [ ] `deploy/modal_app_ui.py` (Streamlit via web_server, Tesseract in the image, Volume at /data) deployed; model service deployed
+- [ ] `deploy/modal_app_ui.py` (FastAPI + built `web/dist` via web_server, Tesseract + `hin` in the image, Volume at /data) deployed; model service deployed
 - [ ] README: what it does, pipeline diagram (Mermaid), models and why, how verification and abstention work, how to run, limitations
 - [ ] Held-out generalisation check: 2-3 differently formatted PDFs (other numbering styles, unnumbered circular, merged-cell fee table, own conflict + amendment) with a small Q&A file, never used during development; run at M5, M6 and here (ADR-013)
 - [ ] Full eval against the deployed model service; all P0 gates pass
 **Done when:** the public URL works from a fresh browser; P0 gates in eval.md pass; README done.
 
-### M9 — P1: OCR, calculator, as-of UI, polish
+### M9 — P1: OCR, calculator, as-of UI, polish (runs BEFORE M8 by user request, ADR-018)
 Read: design/ingest.md §OCR, design/answering.md §5
-- [ ] OCR path + D6 ingest + OCR badge in UI → q38, q39 pass
-- [ ] calculator (emi, late_fee_total, prepayment_charge) → q35–q37 pass
-- [ ] Re-deploy; re-run eval
+- [x] OCR path + D6 ingest + OCR badge in UI → q38, q39 pass
+- [x] calculator (emi, late_fee_total, prepayment_charge) → q35–q37 pass
+- [ ] Re-deploy; re-run eval (after M8)
 **Done when:** P1 gates pass on the deployed app.
+**Status: local part DONE 2026-11-23** (see progress.md); the deployed-app gate is checked at M8.
 
 ### M10 — P2: Hindi, doc scope, export
 Read: design/answering.md §6, design/ui.md

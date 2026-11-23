@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pymupdf
 
-from core import db
+from core import config, db
 from core.ingest import amendments, conflicts, extract, register, store
 from core.ingest.parse import page_needs_ocr, parse_pdf
 from core.ingest.segment import segment
@@ -34,11 +34,8 @@ _thread: threading.Thread | None = None
 
 
 def ocr_available() -> bool:
-    try:
-        import core.ingest.ocr  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    from core.ingest import ocr
+    return ocr.available()
 
 
 def _set_job(conn: sqlite3.Connection, job_id: str, state: str, error: str | None = None) -> None:
@@ -55,9 +52,13 @@ def enqueue(path: Path | str, conn: sqlite3.Connection | None = None, start_work
     sha = register.sha256_file(path)
     row = conn.execute("SELECT doc_id FROM documents WHERE sha256=?", (sha,)).fetchone()
     if row:
-        job = conn.execute("SELECT job_id FROM ingest_jobs WHERE doc_id=? ORDER BY created_at DESC LIMIT 1",
+        job = conn.execute("SELECT job_id,state FROM ingest_jobs WHERE doc_id=? ORDER BY created_at DESC LIMIT 1",
                            (row["doc_id"],)).fetchone()
+        if job and job["state"] == "needs_ocr" and ocr_available():  # parked earlier; the scanned pages can be read now
+            _set_job(conn, job["job_id"], "queued")
         if job:
+            if start_worker and job["state"] in ("queued", "needs_ocr"):
+                _ensure_worker()
             return job["job_id"]
         doc_id = row["doc_id"]
     else:
@@ -98,16 +99,26 @@ def process_job(conn: sqlite3.Connection, job_id: str, client: ModelClient | Non
         conn.commit()
         if scanned and not ocr_available():
             conn.execute("UPDATE documents SET effective_date=NULL WHERE doc_id=?", (doc_id,))  # no text yet: don't guess
-            db.set_document_status(conn, doc_id, "Queued", "needs OCR (M9)")
+            db.set_document_status(conn, doc_id, "Queued", "needs OCR (Tesseract is not installed)")
             _set_job(conn, job_id, "needs_ocr")
             return "needs_ocr"
 
         store.delete_doc_content(conn, doc_id)
         db.set_document_status(conn, doc_id, "Parsing", "parsing pages")
-        pages = parse_pdf(path)
+        pages = parse_pdf(path, on_ocr=lambda i, n: db.set_document_status(conn, doc_id, "OCR", f"OCR page {i}/{n}"))
         store.save_pages(conn, doc_id, pages)
+        if pages and pages[0].is_ocr:  # a scanned first page had no text at registration: read the metadata from the OCR text
+            text = "\n".join(ln.text for ln in pages[0].lines)[:config.REGISTER_PAGE_CHARS]
+            meta, _ = register.extract_meta(text, path.name, client)
+            doc = register.build_document(doc_id, path, sha, meta)
+            db.upsert_document(conn, doc)
+            conn.execute("UPDATE documents SET pages=?, has_ocr=1 WHERE doc_id=?", (n_pages, doc_id))
+            conn.commit()
         db.set_document_status(conn, doc_id, "Parsing", "segmenting clauses")
         clauses, spans = segment(doc_id, pages)
+        conf = {p.page_no: p.ocr_conf for p in pages if p.is_ocr and p.ocr_conf is not None}
+        for sp in spans:
+            sp.ocr_conf = conf.get(sp.page)  # a non-null ocr_conf is what marks a span as scanned
         store.save_clauses(conn, clauses, spans)
         db.set_document_status(conn, doc_id, "Parsing", "indexing")
         index.reindex_doc(conn, doc_id, client.embed, data_dir)

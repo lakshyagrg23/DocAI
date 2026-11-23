@@ -116,3 +116,14 @@ Reference values for tests: `emi(500000, 13.5, 36) == 16968` (±1); `prepayment_
 - Disagreements (M6), chains (M5) and calculation (M9) are empty in M4; their slots in `assemble.answer` are commented. Hindi (M10) not started.
 - Lessons: prompt rules matter more than checks for off-topic answers (ADR-014); keep `missing` honest (rule 12) or every answer turns `partial`.
 - Not done in M4: quote exactness gate from PDF bboxes (eval.md); the UI renders `Span.text` from the DB so quotes are stored text by construction; the bbox cross-check is scheduled with the evidence viewer (M7).
+
+## Implementation notes (M9 — calculator)
+
+- `core/answer/calc.py`: `emi`, `late_fee_total`, `prepayment_charge` (pure, unit-tested in `tests/test_calc.py`) plus `run(plan.calc, question, claims)`.
+- Input sourcing: a planner-proposed number is kept only if it literally appears in the question (`number_tokens`); document inputs come from **supported or contradicted** claims
+  by keyword (interest rate / prepayment / late fee) and carry the claim's first span id. An unverified claim is never an input.
+- Missing input -> no calculation and `Missing input: <name>` in `missing_evidence`. Two different document values for one input (a conflict) -> every option is
+  shown in `steps`, `result` is `null` and no single answer is chosen.
+- `assemble`: the calculator runs after verification. When a result exists, the draft's own `missing` notes are dropped, claims used as inputs are shown in the calculation card instead of the body, and an `abstained` status becomes `answered` (all inputs were stated in the question or verified).
+- The drafter is told when a calculator handles the maths (`draft.calc_note`) and to return only the inputs; without this the 4b model listed the result as "missing" and returned no claims.
+- `plan.sanitise` sets `intent="calculation"` whenever `calc.kind != none`.

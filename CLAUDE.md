@@ -34,7 +34,7 @@ flags contradicting clauses side by side, resolves amendment chains to the rule 
 | `.claude/docs/design/answering.md` | Drafting, verification, gate, faithfulness, calculator, Hindi |
 | `.claude/docs/design/model-service.md` | Ollama + aux models service (local / Colab / Modal) |
 | `.claude/docs/runbook.md` | How to run in dev, on Colab, and how to deploy |
-| `.claude/docs/design/ui.md` | Streamlit pages, multi-chat, evidence viewer |
+| `.claude/docs/design/ui.md` | (legacy Streamlit design; the live UI is design/ui-react.md) |
 | `.claude/docs/demo-corpus.md` | Generating the 6 demo PDFs (exact text) and `tests/qa.yaml` |
 | `.claude/docs/eval.md` | Metrics, `scripts/eval.py`, release gates |
 | `.claude/docs/implementation-plan.md` | **Which milestone is next and its done-when checks** |
@@ -47,7 +47,6 @@ add an ADR to `decisions.md` and update the affected doc in the same change.
 ## Repo layout (target)
 
 ```
-app/                     Streamlit UI (legacy; removed after the React UI reaches parity, ADR-017)
 api/                     FastAPI over core/ (chats, SSE ask, documents, sources, conflicts, amendments)
 web/                     React UI (Vite + TypeScript + Tailwind); `npm run build` -> web/dist, served by api/
 core/
@@ -65,7 +64,7 @@ corpus/generate.py       builds demo PDFs into corpus/pdfs/
 scripts/                 ingest_corpus.py, eval.py, smoke.py
 tests/                   qa.yaml + pytest unit tests
 notebooks/colab_preingest.ipynb
-deploy/modal_app_ui.py   Streamlit on Modal (CPU) with Volume
+deploy/modal_app_ui.py   FastAPI + built React UI on Modal (CPU) with Volume
 ```
 
 ## Commands (keep these working; update here if they change)
@@ -77,7 +76,6 @@ ollama pull qwen2.5:7b-instruct            # once, on the dev machine
 python -m model_service.local              # dev: model service on localhost:8080 (uses your running Ollama)
 modal deploy model_service/modal_app.py    # GPU model service on Modal T4
 python scripts/ingest_corpus.py --reset    # ingest corpus/pdfs → DATA_DIR
-streamlit run app/main.py                  # legacy UI on :8501
 uvicorn api.main:app --port 8000           # API (+ built React UI from web/dist on the same port)
 cd web && npm install && npm run dev       # React dev server on :5173 (proxies /api to :8000)
 cd web && npm run build && npm test        # production build, front-end tests

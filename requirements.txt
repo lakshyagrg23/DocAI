@@ -10,7 +10,6 @@ regex
 networkx
 httpx
 python-dotenv
-streamlit
 reportlab
 pyyaml
 python-ulid

@@ -3,15 +3,15 @@
 ## Components
 
 ```
-Browser ──► UI app (Streamlit, CPU)  ──HTTP(S)──►  Model service (GPU)
-            ├─ app/ pages                         ├─ /llm/chat → Ollama: qwen2.5:7b-instruct
+Browser ──► App (FastAPI + React, CPU)  ──HTTP(S)──►  Model service (GPU)
+            ├─ api/ + web/dist                          ├─ /llm/chat → Ollama: qwen2.5:7b-instruct
             ├─ core/ingest   (background thread)  ├─ /embed   bge-m3
             ├─ core/retrieval                     ├─ /rerank  bge-reranker-v2-m3
             ├─ core/answer                        └─ /nli     HHEM-2.1-open
             └─ DATA_DIR: SQLite, .npy, page PNGs, uploads, logs
 ```
 
-- **UI app**: one Python process. Streamlit front end; ingest runs in a background `threading.Thread` with a
+- **UI app**: one Python process. FastAPI serves the API and the built React UI; ingest runs in a background `threading.Thread` with a
   job queue in SQLite (`ingest_jobs`). Everything except model inference runs here: PyMuPDF, Tesseract, BM25,
   NumPy search, verification logic, version and conflict logic.
 - **Model service**: a small FastAPI app wherever the GPU is. It exposes `/llm/chat` (forwarded to Ollama on
@@ -22,9 +22,9 @@ Browser ──► UI app (Streamlit, CPU)  ──HTTP(S)──►  Model service
 
 | Environment | Model service (+ Ollama) runs on | UI app runs on | Data |
 |---|---|---|---|
-| **Local dev (default)** | your machine: Ollama you already have + `python -m model_service.local` → `http://localhost:8080` | your machine: `streamlit run app/main.py` | `./data` |
+| **Local dev (default)** | your machine: Ollama you already have + `python -m model_service.local` → `http://localhost:8080` | your machine: `uvicorn api.main:app --port 8000` (+ `npm run dev` for the UI) | `./data` |
 | **Colab (optional batch)** | inside the notebook, localhost only | not run (scripts only: ingest, eval) | `/content/.../data` → zip → download |
-| **Production / judging** | Modal T4 (`model_service/modal_app.py`) | Modal CPU container running Streamlit (`deploy/modal_app_ui.py`) | `modal.Volume` "docai-data" mounted at `/data` |
+| **Production / judging** | Modal T4 (`model_service/modal_app.py`) | Modal CPU container running FastAPI + `web/dist` (`deploy/modal_app_ui.py`) | `modal.Volume` "docai-data" mounted at `/data` |
 
 Rules: Colab never serves a public URL (ADR-002). The UI app never needs a GPU. Switching environments = changing `MODEL_BASE_URL`
 (+ `MODEL_API_KEY`), nothing else.
@@ -73,7 +73,7 @@ and a `ModelUnavailable` exception that the UI turns into the amber "warming up"
 - `core/ingest/*` writes to the DB; nothing else writes documents, clauses, spans, facts, edges or conflicts.
 - `core/retrieval/*` is read-only on the DB plus the `.npy` and BM25 pickle in `DATA_DIR/index/`.
 - `core/answer/*` is read-only on the corpus and writes only `messages`.
-- `app/*` calls `core.ingest.pipeline.enqueue(path)` and `core.answer.assemble.answer(chat_id, question)`. No business logic in the UI.
+- `api/*` calls `core.ingest.pipeline.enqueue(path)` and `core.answer.assemble.answer(chat_id, question)`. No business logic in the UI.
 
 ## Request flows
 

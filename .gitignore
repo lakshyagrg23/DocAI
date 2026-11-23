@@ -8,3 +8,4 @@ __pycache__/
 .ruff_cache/
 corpus/pdfs/
 svc.log
+tessdata/

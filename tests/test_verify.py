@@ -26,6 +26,8 @@ def test_parse_value_amounts(raw, vt, amount):
 
 def test_parse_value_other_types():
     assert parse_value("12 to 60 months", "number").low == 12 and parse_value("12 to 60", "number").high == 60
+    v = parse_value("not less than 21 years and not more than 58 years", "number")
+    assert (v.low, v.high) == (21, 58)
     assert parse_value("1 April 2025", "date").date == "2025-04-01"
     assert parse_value("Nil", "bool").flag is False and parse_value("prepayment is permitted", "bool").flag is True
     with pytest.raises(ValueError):

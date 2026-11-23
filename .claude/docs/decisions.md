@@ -83,3 +83,13 @@ The corpus and qa.yaml are ground truth for the M2-M6 done-when checks, so they 
 
 **ADR-017 · 2026-11-23 · React + FastAPI UI replaces Streamlit after parity; plain-language presentation rules.**
 Streamlit cannot give a resizable side panel, inline citation chips, stage progress or a polished sidebar, and its output was hard to understand (jargon, raw ids, repeated facts). We add `api/` (FastAPI over `core/`; no business logic) and `web/` (Vite, React, TypeScript, Tailwind). Streamlit (`app/`) stays until parity, then is removed. The M8 deploy targets one container serving the API and `web/dist` instead of Streamlit (architecture.md §Deployment to be updated at M8). Presentation rules (design/ui-react.md §1-§3): plain words, human names instead of ids, each fact shown once, technical checks behind a "How we checked" disclosure, abstention styled neutral, no token streaming (constraint 2: nothing is shown before verification; a stage stepper is shown instead). Demo example questions live in `api/examples.py` (app layer), not in `core/` or prompts (ADR-013).
+
+**ADR-018 · 2026-11-23 · Streamlit UI removed; OCR (M9) is done before deploy (M8).**
+The user approved the React UI, so `app/`, `tests/test_app.py` and the `streamlit` requirement are deleted. M9 (OCR + calculator) now runs before M8 so the deployed app is feature-complete for P0+P1; the M8 deploy image needs Tesseract (+ `hin`) and the built `web/dist`.
+
+**ADR-019 · 2026-11-23 · M9 choices: one-pass Tesseract OCR, repairs of known confusions, calculator sourcing rules.**
+1. OCR uses `pytesseract.image_to_data` (words + confidence in one pass) instead of PyMuPDF's OCR textpage; deskew is skipped. `ocr_conf` is 0–100.
+2. Two narrow, documented repairs of Tesseract errors are applied (capital I; ₹ read as 2 before lakh/crore, only at low confidence). A wrong amount shown as verified is worse than a clumsy rule; the rest is left as read.
+3. `normalize_text` replaced `rs`/`inr` only as whole words. The old substring rule turned "years " into "yea₹", which silently dropped every age-range fact and so hid conflict C3 (this affected digital documents too).
+4. `parse_value` reads "not less than A … not more than B" as a range. Extract prompt v2: an age limit of who may borrow is always subject "borrower age".
+5. Calculator: inputs only from the question (verified against its literal numbers) or from verified claims; conflicting document values are all shown with no single result.

@@ -11,7 +11,7 @@ import pymupdf
 import pytest
 
 from core import db
-from core.ingest import pipeline, register, store
+from core.ingest import ocr, pipeline, register, store
 from core.ingest.parse import Line, PageContent, Word, parse_pdf
 from core.ingest.segment import segment
 from core.ingest.spans import CWord, build_spans, ends_sentence
@@ -337,15 +337,30 @@ def ingested(tmp_path):
     return conn, tmp_path, client
 
 
-def test_pipeline_ingests_digital_docs_and_parks_scanned(ingested):
+def test_pipeline_ingests_digital_docs_and_ocrs_scanned(ingested):
     conn, _, _ = ingested
     status = {d.doc_id: d for d in db.list_documents(conn)}
     assert [status[f"D{i}"].status for i in range(1, 6)] == ["Ready"] * 5
     assert status["D1"].pages == 6 and status["D1"].effective_date == "2024-01-15"
     assert status["D3"].effective_date == "2025-04-01" and status["D1"].ref_no == "KF/PLA/2024"
-    assert status["D6"].status == "Queued" and status["D6"].status_detail == "needs OCR (M9)"
-    assert status["D6"].has_ocr and status["D6"].effective_date is None
-    assert conn.execute("SELECT COUNT(*) FROM clauses WHERE doc_id='D6'").fetchone()[0] == 0
+    assert status["D6"].has_ocr
+    if not ocr.available():  # parked until Tesseract is installed
+        assert status["D6"].status == "Queued" and status["D6"].status_detail.startswith("needs OCR")
+        return
+    assert status["D6"].status == "Ready" and status["D6"].effective_date == "2025-06-01"
+    q1 = conn.execute("SELECT text FROM clauses WHERE clause_id='D6:p1.q1'").fetchone()["text"]
+    assert "21" in q1 and "60" in q1
+    assert all(r["ocr_conf"] is not None for r in conn.execute("SELECT ocr_conf FROM spans WHERE doc_id='D6'"))
+    assert conn.execute("SELECT is_ocr FROM pages WHERE doc_id='D6'").fetchone()["is_ocr"] == 1
+
+
+def test_scanned_doc_is_parked_without_tesseract(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "ocr_available", lambda: False)
+    conn = db.init_db(tmp_path / "c.db")
+    job = pipeline.enqueue(PDFS / "D6_faq_scanned.pdf", conn, start_worker=False)
+    assert pipeline.process_job(conn, job, StubClient(), tmp_path) == "needs_ocr"
+    d = db.get_document(conn, conn.execute("SELECT doc_id FROM documents").fetchone()["doc_id"])
+    assert d.status == "Queued" and d.status_detail.startswith("needs OCR") and d.effective_date is None
 
 
 def test_dense_rows_align_with_windows_and_bm25(ingested):

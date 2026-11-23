@@ -1,6 +1,6 @@
 """Orchestrates one answer (answering.md §0, §4): plan -> retrieve -> pack -> draft -> verify -> gate -> persist + log.
 
-The calculator (M9) slots in at the marked point.
+The calculator (calc.py) runs after verification: its inputs are verified claims or numbers in the question.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 from core import config, db
 from core import versions as version_graph
-from core.answer import disagree
+from core.answer import calc, disagree
 from core.answer.draft import make_draft
 from core.answer.gate import ABSTAIN_TEXT, gate
 from core.answer.plan import effective_as_of, make_plan, search_queries
@@ -58,7 +58,7 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
     if pack.spans:
         stage("Drafting")
         t0 = time.perf_counter()
-        draft, versions["draft"] = make_draft(question, as_of_date, pack, client)
+        draft, versions["draft"] = make_draft(question, as_of_date, pack, client, plan.calc.kind)
         timings["draft"] = _ms(t0)
         if draft is None:
             drafted_ok, missing = False, ["Drafting failed"]
@@ -78,12 +78,19 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
         cited += [s.clause_id for s in pack.spans]
     chains = version_graph.chains(conn, list(dict.fromkeys(cited)), as_of_date)
     disagreements = disagree.build_disagreements(conn, claims, as_of_date)
-    result = gate(claims, missing, plan.sub_questions if drafted_ok and pack.spans else [])
-    # M9: calc from calc.py
+    calculation, calc_missing, used = calc.run(plan.calc, question, claims) if plan.calc.kind != "none" else (None, [], set())
+    if calculation and calculation["result"] is not None:
+        missing = []  # every required input was found, so the draft's own "missing" notes no longer apply
+    result = gate(claims, missing + calc_missing, plan.sub_questions if drafted_ok and pack.spans else [])
+    if calculation and calculation["result"] is not None:
+        if result.status == "abstained":
+            result.status = "answered"  # all inputs were stated in the question or verified; the working is the answer
+        inputs_shown = {id(claims[i]) for i in used}
+        result.supported = [c for c in result.supported if id(c) not in inputs_shown]  # shown in the calculation card
     ans = AnswerJSON(
         status=result.status, question=question, question_en=question, as_of_date=as_of_date, intent=plan.intent,
         claims=result.supported + result.contested, blocked_claims=result.blocked, missing_evidence=result.missing,
-        disagreements=disagreements,
+        disagreements=disagreements, calculation=calculation,
         chains=chains if result.status != "abstained" else [],
         faithfulness_pct=result.faithfulness_pct, drafted=result.drafted, passed=result.passed,
         prompt_versions=versions, timings_ms=timings, evidence_spans=[s.span_id for s in pack.spans])
@@ -99,6 +106,8 @@ def render_text(ans: AnswerJSON) -> str:
         lines = [ABSTAIN_TEXT]
     else:
         lines = [c.text for c in ans.claims]
+    if ans.calculation and ans.calculation.get("result") is not None:
+        lines += [f"Result: {calc.inr(ans.calculation['result'])}"]
     if ans.missing_evidence:
         lines += ["Missing: " + "; ".join(ans.missing_evidence)]
     return "\n".join(lines)

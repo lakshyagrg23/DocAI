@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
-from test_app import Answerer
+from test_conflicts import Facts
 from test_ingest import corpus  # noqa: F401  (autouse fixture that builds the PDFs)
 from test_versions import ingest
 
@@ -14,7 +14,24 @@ from api import deps, serialize
 from api.main import create_app
 from core import config, db
 from core.llm.client import ModelUnavailable
+from core.models import Draft, DraftClaim, QueryPlan
 from core.retrieval.hybrid import Retriever
+
+
+class Answerer(Facts):
+    """Scripted model: plans one sub-question and drafts the two conflicting late-fee claims."""
+
+    def chat_json(self, messages, model_cls, max_tokens=900):
+        if model_cls is QueryPlan:
+            return QueryPlan(sub_questions=["late payment fee per instalment"])
+        if model_cls is Draft:
+            return Draft(claims=[DraftClaim(text="The late payment fee is ₹500 per instalment", span_ids=["D1:8.1#s1"]),
+                                 DraftClaim(text="The late payment fee is ₹750 per instalment",
+                                            span_ids=["D2:table1.row2#s1"])])
+        return super().chat_json(messages, model_cls, max_tokens)
+
+    def nli(self, pairs):
+        return [0.95] * len(pairs)
 
 
 @pytest.fixture(scope="module")
@@ -70,7 +87,7 @@ def test_health_states(client, monkeypatch):
         raise ModelUnavailable("x")
     monkeypatch.setattr(deps.get_model(), "health", down, raising=False)
     assert client.get("/api/health").json()["state"] == "offline"
-    assert len(client.get("/api/examples").json()) == 3
+    assert len(client.get("/api/examples").json()) == 4
 
 
 def test_chat_crud_and_validation(client):

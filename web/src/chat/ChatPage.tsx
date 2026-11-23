@@ -20,7 +20,7 @@ function EmptyState({ examples, onPick }: { examples: Example[]; onPick: (q: str
         Ask about your documents. You get an answer only when it can be proven from them, with the exact page and wording shown.
         When documents disagree, you see both sides.
       </p>
-      <div className="mt-8 grid w-full gap-3 sm:grid-cols-3">
+      <div className="mt-8 grid w-full gap-3 sm:grid-cols-2">
         {examples.map((e) => (
           <button
             key={e.question}

@@ -32,7 +32,7 @@ def sanitise(plan: QueryPlan, question: str) -> QueryPlan:
         except ValueError:
             override = None
     calc = plan.calc if plan.calc.kind != "none" else CalcPlan()
-    intent = plan.intent
+    intent = "calculation" if calc.kind != "none" else plan.intent
     if override and intent in ("lookup", "multi"):
         intent = "history"
     return QueryPlan(intent=intent, sub_questions=subs, as_of_override=override, calc=calc)

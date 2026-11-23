@@ -118,3 +118,17 @@ Rules:
 - **Register:** LLM values are verified: `ref_no` must literally occur in the page text (else the regex value is used); unparseable dates fall back to regex values; no LLM -> heuristics.
 - **Scanned docs (until M9):** registered, `has_ocr=1`, status `Queued`, `status_detail="needs OCR (M9)"`, `effective_date` left NULL (no text to date it), job state `needs_ocr`.
 - **Tokenizer:** the specified regex splits `13.5%` into `13.5` and `%`; kept as specified.
+
+## Implementation notes (M9 — OCR)
+
+- `core/ingest/ocr.py` runs **one** `pytesseract.image_to_data` pass per page on the 300 dpi pixmap (grayscale + autocontrast, no deskew). The
+  same pass gives words, boxes and confidence, so PyMuPDF's `get_textpage_ocr` is not used. Boxes are scaled by 72/dpi back to page units.
+  Lines come from Tesseract's (block, paragraph, line) ids; `font_size` is the line height, `bold` is always false (the FAQ segmenter does not need it).
+- `pages.ocr_conf` = mean word confidence, 0–100. Every span on an OCR page gets that value; **a non-null `spans.ocr_conf` is what marks a span as scanned** (UI badge, eval `ocr_badge`).
+- `OCR_LANG="eng+hin"` is intersected with the installed packs (`ocr.usable_lang()`), so a missing Hindi pack does not block English. Tesseract is found via `TESSERACT_CMD`, `PATH`, or the Windows default path.
+- Two narrow repairs of known Tesseract confusions (`fix_word`, `fix_rupee`): a lone `|` becomes `I`, `EMls` becomes `EMIs`; a low-confidence
+  (< `OCR_RUPEE_FIX_CONF`) number starting with 2 directly before lakh/crore is read as a rupee amount ("225 lakh" -> "₹25 lakh"), because the English model has no ₹ glyph. Anything else is kept as read.
+- If the first page is scanned, document metadata (title, dates) is re-extracted from the OCR text after parsing; until then `effective_date` is NULL.
+- Without Tesseract a scanned document is parked (`needs_ocr`, status "Queued"); `enqueue()` re-queues a parked job as soon as OCR is available.
+- Limitations: no table reconstruction on scanned pages, no handwriting, other currency-glyph misreads are not repaired (low confidence is visible in the "Scanned page" badge).
+- Install: Windows `winget install UB-Mannheim.TesseractOCR`; Linux/Colab `apt install tesseract-ocr tesseract-ocr-hin`.

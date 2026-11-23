@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -154,13 +155,25 @@ def strip_running(pages: list[PageContent]) -> None:
                     if not (in_zone(ln, pc) and (PAGE_RE.search(ln.text) or _norm(ln.text) in repeated))]
 
 
-def parse_pdf(path: Path | str, skip_ocr_pages: bool = True) -> list[PageContent]:
-    """Parse every page. Pages that need OCR come back empty with is_ocr=True when skip_ocr_pages (M9 fills them)."""
+def parse_pdf(path: Path | str, ocr: bool = True,
+              on_ocr: Callable[[int, int], None] | None = None) -> list[PageContent]:
+    """Parse every page. Image-only pages are OCR'd (core.ingest.ocr) when `ocr` is true, else returned empty with is_ocr=True.
+
+    `on_ocr(done, total)` is called before each OCR page so the pipeline can show "OCR page 2/3".
+    """
     pages: list[PageContent] = []
     with pymupdf.open(path) as doc:
+        todo = [i for i, p in enumerate(doc, start=1) if page_needs_ocr(p)] if ocr else []
         for i, page in enumerate(doc, start=1):
-            if page_needs_ocr(page) and skip_ocr_pages:
-                pages.append(PageContent(page_no=i, width=page.rect.width, height=page.rect.height, is_ocr=True))
+            if page_needs_ocr(page):
+                if ocr:
+                    # local import: Tesseract is only needed for scanned pages
+                    from core.ingest.ocr import ocr_page
+                    if on_ocr:
+                        on_ocr(todo.index(i) + 1, len(todo))
+                    pages.append(ocr_page(page, i))
+                else:
+                    pages.append(PageContent(page_no=i, width=page.rect.width, height=page.rect.height, is_ocr=True))
             else:
                 pages.append(parse_page(page, i))
     strip_running(pages)

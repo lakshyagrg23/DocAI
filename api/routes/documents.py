@@ -14,10 +14,10 @@ from core.ingest import pipeline
 from core.render import highlight
 
 router = APIRouter(prefix="/api")
-STATUS_PLAIN = {"Queued": "Waiting", "Parsing": "Reading the document", "Extracting facts": "Finding facts and amounts",
+STATUS_PLAIN = {"Queued": "Waiting", "Parsing": "Reading the document", "OCR": "Reading the scanned pages", "Extracting facts": "Finding facts and amounts",
                 "Resolving amendments": "Linking amendments", "Checking conflicts": "Comparing with other documents",
                 "Ready": "Ready", "Failed": "Failed"}
-BUSY = {"Parsing", "Extracting facts", "Resolving amendments", "Checking conflicts"}
+BUSY = {"Parsing", "OCR", "Extracting facts", "Resolving amendments", "Checking conflicts"}
 
 
 def _count(conn: sqlite3.Connection, sql: str, doc_id: str) -> int:

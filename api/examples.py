@@ -8,4 +8,6 @@ EXAMPLES = [
      "hint": "Follows amendments to the rule in force"},
     {"title": "Ask something not covered", "question": "What is the GST rate on the processing fee?",
      "hint": "Shows how missing proof is handled"},
+    {"title": "Work out an amount", "question": "What would my EMI be on a ₹5,00,000 loan at the agreement's interest rate for 36 months?",
+     "hint": "Shows the working, step by step"},
 ]

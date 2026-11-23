@@ -46,7 +46,7 @@ Token = tuple[str, float | str]  # ("num", 500.0) | ("pct", 4.0) | ("date", "202
 
 def normalize_text(s: str) -> str:
     """Lowercase; unify rupee spellings; drop commas and whitespace (for containment tests)."""
-    s = s.lower().replace("rs.", "₹").replace("rs ", "₹").replace("inr", "₹")
+    s = re.sub(r"\b(?:rs|inr)\b\.?", "₹", s.lower())  # whole words only: "years " must stay "years"
     return re.sub(r"[,\s]+", "", s)
 
 
@@ -174,6 +174,10 @@ def parse_value(value_raw: str, value_type: str) -> FactValue:
         if re.search(r"\b(permitted|allowed|may)\b", raw, re.IGNORECASE):
             return FactValue(flag=True)
         raise ValueError(f"no flag in {raw!r}")
+    lo = re.search(rf"(?:not less than|at least|minimum(?: of)?)\D{{0,12}}?({_NUM})", raw, re.IGNORECASE)
+    hi = re.search(rf"(?:not more than|not exceeding|at most|maximum(?: of)?)\D{{0,12}}?({_NUM})", raw, re.IGNORECASE)
+    if lo and hi and value_type in ("number", "duration"):  # "not less than 21 years and not more than 58 years"
+        return FactValue(low=to_float(lo[1]), high=to_float(hi[1]))
     rng = re.search(rf"({_NUM})\s*(?:to|-|–|—|and)\s*({_NUM})", raw)
     if rng and value_type in ("number", "duration"):
         return FactValue(low=to_float(rng[1]), high=to_float(rng[2]))

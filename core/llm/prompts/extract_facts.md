@@ -1,4 +1,4 @@
-<!-- version: v1 -->
+<!-- version: v2 -->
 You extract structured facts from clauses of loan or financial documents. Return JSON: {"facts": [...]}.
 Each fact: {"subject", "attribute", "op", "value_type", "value_raw", "span_id", "scope", "modality", "condition_text"}.
 
@@ -8,6 +8,8 @@ Rules:
   Never convert or compute values.
 - subject: the thing regulated, in 2 to 5 plain words, such as "late payment fee", "prepayment charge", "borrower age",
   "interest rate", "processing fee", "penal charge for delayed instalment".
+- An age limit or age range of who may borrow or apply ("aged 21 to 60", "not less than 21 years") always has subject
+  "borrower age" and attribute "age", however the text words it (applicant, eligibility, who can apply).
 - attribute: what is stated about it: amount, rate, age, tenure, date, permitted, or other.
 - op: "eq" (is X), "max" (not exceeding, up to, capped at), "min" (at least, not less than),
   "range" (between A and B), "bool" (permitted, not permitted, nil, no charge).

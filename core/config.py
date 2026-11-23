@@ -44,6 +44,7 @@ EXTRACT_WORKERS = 2  # parallel extraction calls (Ollama serves a few requests a
 OCR_MIN_CHARS = 50  # page text chars below this + has image -> OCR
 OCR_DPI = 300
 OCR_LANG = "eng+hin"
+OCR_RUPEE_FIX_CONF = 85  # below this word confidence, "2<digits> lakh/crore" is read as a rupee amount
 
 # llm
 LLM_TEMPERATURE = 0.0
