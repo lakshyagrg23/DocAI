@@ -47,8 +47,8 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
 
     stage("Retrieving")
     t0 = time.perf_counter()
-    scope = chat.doc_scope if chat else None
-    hits = retriever.retrieve(search_queries(plan, question), scope)
+    scope = db.chat_doc_scope(conn, chat) if chat else None  # the chat's workspace, narrowed by its picker (ADR-024)
+    hits = retriever.retrieve(search_queries(plan, question), scope) if scope != [] else []  # [] = nothing to search
     pack = restrict(build_pack(conn, hits, as_of_date), scope)  # amendment versions can live in other documents
     disagree.recheck(conn, sorted({s.clause_id for s in pack.spans}))
     disagree.add_partners(conn, pack, as_of_date, scope)  # the other half of any conflict in effect must be shown too

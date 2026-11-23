@@ -45,7 +45,7 @@ def conflicts_in_effect(conn: sqlite3.Connection, clause_ids: list[str], as_of: 
             continue
         if versions.status(conn, r["ca"], as_of) != "in_force" or versions.status(conn, r["cb"], as_of) != "in_force":
             continue
-        if doc_scope and not {_doc_of(conn, r["ca"]), _doc_of(conn, r["cb"])} <= set(doc_scope):
+        if doc_scope is not None and not {_doc_of(conn, r["ca"]), _doc_of(conn, r["cb"])} <= set(doc_scope):
             continue
         if r["ca"] in clause_ids:
             out.append((r, "a"))
@@ -94,13 +94,17 @@ def build_disagreements(conn: sqlite3.Connection, claims: list[VerifiedClaim], a
     return cards_from_ids(conn, ids, as_of)
 
 
-def active_conflict_ids(conn: sqlite3.Connection, as_of: str) -> list[str]:
-    """Every stored conflict that applies at `as_of` (both sides in force): the Conflicts page."""
+def active_conflict_ids(conn: sqlite3.Connection, as_of: str, doc_scope: list[str] | None = None) -> list[str]:
+    """Every stored conflict that applies at `as_of` (both sides in force): the Conflicts page.
+    With a document scope (a workspace's documents) only conflicts between two of those documents count."""
     out = []
     for r in conn.execute("SELECT cf.*, fa.clause_id AS ca, fb.clause_id AS cb FROM conflicts cf "
                           "JOIN facts fa ON fa.fact_id=cf.fact_a JOIN facts fb ON fb.fact_id=cf.fact_b "
                           "ORDER BY cf.conflict_id"):
-        if _in_effect(r, as_of) and versions.status(conn, r["ca"], as_of) == "in_force"                 and versions.status(conn, r["cb"], as_of) == "in_force":
+        if doc_scope is not None and not {_doc_of(conn, r["ca"]), _doc_of(conn, r["cb"])} <= set(doc_scope):
+            continue
+        if _in_effect(r, as_of) and versions.status(conn, r["ca"], as_of) == "in_force" \
+                and versions.status(conn, r["cb"], as_of) == "in_force":
             out.append(r["conflict_id"])
     return out
 
@@ -150,8 +154,8 @@ def add_partners(conn: sqlite3.Connection, pack: EvidencePack, as_of: str, doc_s
     added = []
     for cid in conflict_partners(conn, sorted(have), as_of, doc_scope):
         for sp in _load_spans(conn, cid, 0.0, "in_force"):
-            if doc_scope and sp.doc_id not in doc_scope:
-                continue  # the user limited this chat to some documents
+            if doc_scope is not None and sp.doc_id not in doc_scope:
+                continue  # outside this chat's workspace or document picker
             pack.spans.append(sp)
             pack.tokens += approx_tokens(sp.line)
         added.append(cid)

@@ -109,8 +109,8 @@ def build_pack(conn: sqlite3.Connection, hits: list[Hit], as_of: str,
 
 
 def restrict(pack: EvidencePack, doc_scope: list[str] | None) -> EvidencePack:
-    """Keep only spans from the chat's selected documents (None or empty = all documents)."""
-    if not doc_scope:
+    """Keep only spans from the chat's allowed documents (None = all documents; an empty list keeps nothing)."""
+    if doc_scope is None:
         return pack
     keep = set(doc_scope)
     pack.spans = [s for s in pack.spans if s.doc_id in keep]

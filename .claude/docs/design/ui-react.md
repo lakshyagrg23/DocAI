@@ -122,3 +122,7 @@ with screenshots at 1440px, 1024px and 390px, light and dark.
 - The date is the user's local calendar day (UTC "today" was off by one near midnight and made the date chip look changed).
 - Dev: `uvicorn api.main:app --port 8000` and `cd web && npm run dev` (http://localhost:5173). One process: `npm run build`, then open http://localhost:8000.
 - Gotcha: the Bash tool turns `\\b` into a backspace inside heredocs; write regexes with the Write/Edit tools (ruff and tsc do not always catch it in TypeScript).
+
+## Workspaces (2026-11-23)
+
+Routes are now `/workspaces` and `/w/:workspaceId/{,chat/:chatId,library,conflicts,amendments}`; the sidebar has a workspace switcher and the API endpoints for chats, documents, conflicts and amendments take a `workspace_id`. Everything about it is in design/workspaces.md (this document's layout and answer-card sections are unchanged).

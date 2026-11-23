@@ -46,6 +46,12 @@ OCR_DPI = 300
 OCR_LANG = "eng+hin"
 OCR_RUPEE_FIX_CONF = 85  # below this word confidence, "2<digits> lakh/crore" is read as a rupee amount
 
+# workspaces (ADR-024)
+DEFAULT_WORKSPACE_ID = "ws_demo"  # trusted local ingest and legacy rows land here; it cannot be deleted from the API
+DEFAULT_WORKSPACE_NAME = "Kestrel demo"
+MAX_WORKSPACES = 20
+WORKSPACE_NAME_MAX = 60
+
 # llm
 LLM_TEMPERATURE = 0.0
 LLM_MAX_RETRIES = 1

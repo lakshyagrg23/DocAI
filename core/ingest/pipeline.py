@@ -45,14 +45,18 @@ def _set_job(conn: sqlite3.Connection, job_id: str, state: str, error: str | Non
 
 
 def enqueue(path: Path | str, conn: sqlite3.Connection | None = None, start_worker: bool = True,
-            stable_ids: bool = True) -> str:
-    """Register the file cheaply (sha, id, row) and queue it. A known sha returns the existing doc's latest job.
-    `stable_ids=False` (the upload API) ignores D1_-style file names when choosing the doc id."""
+            stable_ids: bool = True, workspace_id: str = config.DEFAULT_WORKSPACE_ID) -> str:
+    """Register the file cheaply (sha, id, row) and queue it. A known sha *in the same workspace* returns the existing
+    doc's latest job; the same PDF in another workspace is a separate document (ADR-024).
+    `stable_ids=False` (the upload API) ignores D1_-style file names when choosing the doc id.
+    The default workspace is for trusted local ingest and tests; the upload API always names one."""
     own = conn is None
     conn = conn or db.init_db()
     path = Path(path)
     sha = register.sha256_file(path)
-    row = conn.execute("SELECT doc_id FROM documents WHERE sha256=?", (sha,)).fetchone()
+    if workspace_id == config.DEFAULT_WORKSPACE_ID:
+        db.ensure_workspace(conn, workspace_id, config.DEFAULT_WORKSPACE_NAME)
+    row = conn.execute("SELECT doc_id FROM documents WHERE sha256=? AND workspace_id=?", (sha, workspace_id)).fetchone()
     if row:
         job = conn.execute("SELECT job_id,state FROM ingest_jobs WHERE doc_id=? ORDER BY created_at DESC LIMIT 1",
                            (row["doc_id"],)).fetchone()
@@ -64,8 +68,13 @@ def enqueue(path: Path | str, conn: sqlite3.Connection | None = None, start_work
             return job["job_id"]
         doc_id = row["doc_id"]
     else:
-        doc_id = register.make_doc_id(path.name, sha, stable_ids)
-        db.upsert_document(conn, register.build_document(doc_id, path, sha, None))
+        doc_id = register.make_doc_id(path.name, sha, stable_ids, workspace_id)
+        taken = conn.execute("SELECT workspace_id FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
+        if taken and taken["workspace_id"] != workspace_id:  # a stable id (D1) is already used by another workspace
+            doc_id = register.make_doc_id(path.name, sha, False, workspace_id)
+        doc = register.build_document(doc_id, path, sha, None)
+        doc.workspace_id = workspace_id
+        db.upsert_document(conn, doc)
     job_id = db.new_id("job")
     now = db.now_iso()
     conn.execute("INSERT INTO ingest_jobs(job_id,doc_id,path,state,error,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",

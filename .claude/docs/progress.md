@@ -111,3 +111,10 @@ what's next, and gotchas the next session must know (version pins, API quirks, t
 - Backend: scope enforced in pack, partners and conflict lookups (ADR-023); `api/export.py` and `/api/chats/{id}/export`; 3 new API tests (204 backend tests pass). Front end: `ScopeMenu` in the composer, Export link, 3 new tests (24 pass); UI rebuilt and the menu checked in a real browser (local, no model use).
 - Not deployed yet: Hindi (M10 part 2) comes first, then one GPU session and one redeploy.
 - Next: Hindi per design/answering.md §6 (detect, translate question, number guard, UI strings), tested locally against Ollama; q40 on the GPU session.
+
+## 2026-11-23 (late night) — Workspaces (ADR-024)
+- Done: documents and chats now belong to workspaces (backend, API, React UI), with in-place migration of old databases into "Kestrel demo". Full design, rules, API and file-by-file change log: `design/workspaces.md`.
+- Gate: 219 backend tests (new `tests/test_workspaces.py`; existing API/access/health tests updated) and ruff clean; 40 front-end tests, `tsc` and build OK; browser-checked locally on a copy of the real data (migration, create, switch, empty states, demo-only conflicts). No GPU or model-service run, no eval re-run.
+- Bugs found on the way: a just-created workspace was bounced back to the list (navigation before the list refetched; fixed + regression test); blocked claims could carry span ids of another workspace into `sources` (fixed in `serialize.enrich_answer`).
+- Gotchas: `doc_scope=[]` now means "nothing" (was "everything"); the same PDF in another workspace gets a hashed id, so stub-LLM tests keyed on `D1:` span ids only work in the default workspace or with stable ids; the Bash tool choked on a long `python - <<EOF` heredoc with quotes, write scripts to a file or use Edit/Write.
+- Open: single-document delete (needs a re-scan, see workspaces.md §7); deploy (redeploy `docai-app`; its restored `/state` migrates on start); upload through the UI against a live model service; Hindi (M10 part 2) still next.

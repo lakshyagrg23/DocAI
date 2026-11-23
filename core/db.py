@@ -9,15 +9,21 @@ from pathlib import Path
 from ulid import ULID
 
 from core import config
-from core.models import Chat, Document, Message
+from core.models import Chat, Document, Message, Workspace
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS documents(
+# The same PDF may live in two workspaces, so the content hash is unique per workspace, not globally (ADR-024).
+DOCUMENTS_DDL = """CREATE TABLE IF NOT EXISTS documents(
   doc_id TEXT PRIMARY KEY, title TEXT, doc_type TEXT,
   issuer TEXT, ref_no TEXT, ref_aliases TEXT,
   issue_date TEXT, effective_date TEXT,
-  sha256 TEXT UNIQUE, filename TEXT, pages INT, has_ocr INT DEFAULT 0, language TEXT DEFAULT 'en',
-  status TEXT, status_detail TEXT, created_at TEXT);
+  sha256 TEXT, filename TEXT, pages INT, has_ocr INT DEFAULT 0, language TEXT DEFAULT 'en',
+  status TEXT, status_detail TEXT, created_at TEXT, workspace_id TEXT,
+  UNIQUE(workspace_id, sha256));
+"""
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS workspaces(workspace_id TEXT PRIMARY KEY, name TEXT, created_at TEXT);
+""" + DOCUMENTS_DDL + """
 CREATE TABLE IF NOT EXISTS pages(doc_id TEXT, page_no INT, width REAL, height REAL, is_ocr INT, ocr_conf REAL,
   PRIMARY KEY(doc_id, page_no));
 CREATE TABLE IF NOT EXISTS clauses(
@@ -48,7 +54,7 @@ CREATE TABLE IF NOT EXISTS conflicts(
   differing TEXT,
   UNIQUE(fact_a, fact_b));
 CREATE TABLE IF NOT EXISTS chats(chat_id TEXT PRIMARY KEY, title TEXT, created_at TEXT, as_of_date TEXT,
-  language TEXT DEFAULT 'auto', doc_scope TEXT);
+  language TEXT DEFAULT 'auto', doc_scope TEXT, workspace_id TEXT);
 CREATE TABLE IF NOT EXISTS messages(msg_id TEXT PRIMARY KEY, chat_id TEXT, role TEXT, content TEXT,
   answer_json TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS ingest_jobs(job_id TEXT PRIMARY KEY, doc_id TEXT, path TEXT, state TEXT, error TEXT,
@@ -63,7 +69,7 @@ CREATE INDEX IF NOT EXISTS ix_messages_chat ON messages(chat_id);
 """
 
 TABLES = [
-    "documents", "pages", "clauses", "spans", "windows", "subjects", "facts",
+    "workspaces", "documents", "pages", "clauses", "spans", "windows", "subjects", "facts",
     "amendment_edges", "clause_versions", "conflicts", "chats", "messages", "ingest_jobs",
 ]
 
@@ -89,8 +95,96 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
 def init_db(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn = connect(db_path)
     conn.executescript(SCHEMA)
+    migrate(conn)
     conn.commit()
     return conn
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    return [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+
+def _has_global_sha_unique(conn: sqlite3.Connection) -> bool:
+    for idx in conn.execute("PRAGMA index_list(documents)").fetchall():
+        if idx["unique"] and [c["name"] for c in conn.execute(f"PRAGMA index_info({idx['name']})")] == ["sha256"]:
+            return True
+    return False
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    """Bring a database created before workspaces (ADR-024) up to date. Idempotent; a no-op on a current database.
+
+    Everything that existed before (documents, chats) is put into the default workspace, so no data is lost or hidden."""
+    for table in ("documents", "chats"):
+        if "workspace_id" not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN workspace_id TEXT")
+    if _has_global_sha_unique(conn):  # SQLite cannot drop a constraint: rebuild the table with the per-workspace one
+        cols = ",".join(_columns(conn, "documents"))
+        conn.executescript("ALTER TABLE documents RENAME TO documents_old;" + DOCUMENTS_DDL)
+        conn.execute(f"INSERT INTO documents({cols}) SELECT {cols} FROM documents_old")
+        conn.execute("DROP TABLE documents_old")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_docs_ws ON documents(workspace_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_chats_ws ON chats(workspace_id)")
+    orphans = conn.execute("SELECT (SELECT COUNT(*) FROM documents WHERE workspace_id IS NULL)"
+                           " + (SELECT COUNT(*) FROM chats WHERE workspace_id IS NULL)").fetchone()[0]
+    if orphans:
+        ensure_workspace(conn, config.DEFAULT_WORKSPACE_ID, config.DEFAULT_WORKSPACE_NAME)
+        for table in ("documents", "chats"):
+            conn.execute(f"UPDATE {table} SET workspace_id=? WHERE workspace_id IS NULL", (config.DEFAULT_WORKSPACE_ID,))
+    conn.commit()
+
+
+# --- workspaces --------------------------------------------------------------
+
+def ensure_workspace(conn: sqlite3.Connection, workspace_id: str, name: str) -> None:
+    conn.execute("INSERT OR IGNORE INTO workspaces(workspace_id,name,created_at) VALUES(?,?,?)",
+                 (workspace_id, name, now_iso()))
+    conn.commit()
+
+
+def create_workspace(conn: sqlite3.Connection, name: str) -> Workspace:
+    ws = Workspace(workspace_id=new_id("ws"), name=name, created_at=now_iso())
+    conn.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES(?,?,?)", (ws.workspace_id, ws.name, ws.created_at))
+    conn.commit()
+    return ws
+
+
+def get_workspace(conn: sqlite3.Connection, workspace_id: str) -> Workspace | None:
+    r = conn.execute("SELECT * FROM workspaces WHERE workspace_id=?", (workspace_id,)).fetchone()
+    return Workspace(**dict(r)) if r else None
+
+
+def list_workspaces(conn: sqlite3.Connection) -> list[dict]:
+    """Workspaces (oldest first) with their document and chat counts."""
+    rows = conn.execute(
+        "SELECT w.*, (SELECT COUNT(*) FROM documents d WHERE d.workspace_id=w.workspace_id) AS documents,"
+        " (SELECT COUNT(*) FROM documents d WHERE d.workspace_id=w.workspace_id AND d.status='Ready') AS ready,"
+        " (SELECT COUNT(*) FROM chats c WHERE c.workspace_id=w.workspace_id) AS chats "
+        "FROM workspaces w ORDER BY w.created_at, w.workspace_id").fetchall()
+    return [dict(r) for r in rows]
+
+
+def rename_workspace(conn: sqlite3.Connection, workspace_id: str, name: str) -> None:
+    conn.execute("UPDATE workspaces SET name=? WHERE workspace_id=?", (name, workspace_id))
+    conn.commit()
+
+
+def workspace_doc_ids(conn: sqlite3.Connection, workspace_id: str) -> list[str]:
+    return [r["doc_id"] for r in conn.execute("SELECT doc_id FROM documents WHERE workspace_id=? ORDER BY doc_id", (workspace_id,))]
+
+
+def chat_doc_scope(conn: sqlite3.Connection, chat: Chat) -> list[str] | None:
+    """The documents a chat may use: its workspace's documents, narrowed by the chat's own picker when it has one.
+
+    A list is a hard boundary even when empty (an empty workspace must not fall back to "everything").
+    None only for a chat without a workspace (legacy callers), where the chat's own scope, if any, applies."""
+    if chat.workspace_id is None:
+        return chat.doc_scope
+    allowed = workspace_doc_ids(conn, chat.workspace_id)
+    if chat.doc_scope:
+        keep = set(chat.doc_scope)
+        return [d for d in allowed if d in keep]
+    return allowed
 
 
 # --- documents ---------------------------------------------------------------
@@ -98,8 +192,8 @@ def init_db(db_path: Path | str | None = None) -> sqlite3.Connection:
 def upsert_document(conn: sqlite3.Connection, doc: Document) -> None:
     conn.execute(
         """INSERT INTO documents(doc_id,title,doc_type,issuer,ref_no,ref_aliases,issue_date,effective_date,
-             sha256,filename,pages,has_ocr,language,status,status_detail,created_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             sha256,filename,pages,has_ocr,language,status,status_detail,created_at,workspace_id)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(doc_id) DO UPDATE SET title=excluded.title, doc_type=excluded.doc_type,
              issuer=excluded.issuer, ref_no=excluded.ref_no, ref_aliases=excluded.ref_aliases,
              issue_date=excluded.issue_date, effective_date=excluded.effective_date,
@@ -107,7 +201,7 @@ def upsert_document(conn: sqlite3.Connection, doc: Document) -> None:
              language=excluded.language, status=excluded.status, status_detail=excluded.status_detail""",
         (doc.doc_id, doc.title, doc.doc_type, doc.issuer, doc.ref_no, json.dumps(doc.ref_aliases),
          doc.issue_date, doc.effective_date, doc.sha256, doc.filename, doc.pages, int(doc.has_ocr),
-         doc.language, doc.status, doc.status_detail, doc.created_at or now_iso()),
+         doc.language, doc.status, doc.status_detail, doc.created_at or now_iso(), doc.workspace_id),
     )
     conn.commit()
 
@@ -124,9 +218,17 @@ def get_document(conn: sqlite3.Connection, doc_id: str) -> Document | None:
     return _doc_from_row(r) if r else None
 
 
-def list_documents(conn: sqlite3.Connection) -> list[Document]:
-    rows = conn.execute("SELECT * FROM documents ORDER BY doc_id").fetchall()
+def list_documents(conn: sqlite3.Connection, workspace_id: str | None = None) -> list[Document]:
+    if workspace_id is None:
+        rows = conn.execute("SELECT * FROM documents ORDER BY doc_id").fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM documents WHERE workspace_id=? ORDER BY doc_id", (workspace_id,)).fetchall()
     return [_doc_from_row(r) for r in rows]
+
+
+def workspace_of_doc(conn: sqlite3.Connection, doc_id: str) -> str | None:
+    r = conn.execute("SELECT workspace_id FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
+    return r["workspace_id"] if r else None
 
 
 def set_document_status(conn: sqlite3.Connection, doc_id: str, status: str, detail: str | None = None) -> None:
@@ -136,11 +238,12 @@ def set_document_status(conn: sqlite3.Connection, doc_id: str, status: str, deta
 
 # --- chats / messages --------------------------------------------------------
 
-def create_chat(conn: sqlite3.Connection, title: str = "New chat", as_of_date: str | None = None) -> Chat:
-    chat = Chat(chat_id=new_id("chat"), title=title, created_at=now_iso(), as_of_date=as_of_date)
+def create_chat(conn: sqlite3.Connection, title: str = "New chat", as_of_date: str | None = None,
+                workspace_id: str | None = None) -> Chat:
+    chat = Chat(chat_id=new_id("chat"), title=title, created_at=now_iso(), as_of_date=as_of_date, workspace_id=workspace_id)
     conn.execute(
-        "INSERT INTO chats(chat_id,title,created_at,as_of_date,language,doc_scope) VALUES(?,?,?,?,?,?)",
-        (chat.chat_id, chat.title, chat.created_at, chat.as_of_date, chat.language, None),
+        "INSERT INTO chats(chat_id,title,created_at,as_of_date,language,doc_scope,workspace_id) VALUES(?,?,?,?,?,?,?)",
+        (chat.chat_id, chat.title, chat.created_at, chat.as_of_date, chat.language, None, workspace_id),
     )
     conn.commit()
     return chat
@@ -152,8 +255,12 @@ def _chat_from_row(r: sqlite3.Row) -> Chat:
     return Chat(**d)
 
 
-def list_chats(conn: sqlite3.Connection) -> list[Chat]:
-    rows = conn.execute("SELECT * FROM chats ORDER BY created_at DESC, chat_id DESC").fetchall()
+def list_chats(conn: sqlite3.Connection, workspace_id: str | None = None) -> list[Chat]:
+    if workspace_id is None:
+        rows = conn.execute("SELECT * FROM chats ORDER BY created_at DESC, chat_id DESC").fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM chats WHERE workspace_id=? ORDER BY created_at DESC, chat_id DESC",
+                            (workspace_id,)).fetchall()
     return [_chat_from_row(r) for r in rows]
 
 

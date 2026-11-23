@@ -125,14 +125,16 @@ def run(conn: sqlite3.Connection, doc_id: str, client: ModelClient) -> None:
 
 
 def resolve_all(conn: sqlite3.Connection) -> None:
-    """(Re-)resolve every edge's target document. Idempotent, so late uploads and re-ingests heal old edges."""
-    docs = conn.execute("SELECT doc_id,title,ref_no,ref_aliases,issue_date FROM documents").fetchall()
+    """(Re-)resolve every edge's target document. Idempotent, so late uploads and re-ingests heal old edges.
+    An amendment can only amend a document of its own workspace (ADR-024)."""
+    docs = conn.execute("SELECT doc_id,title,ref_no,ref_aliases,issue_date,workspace_id FROM documents").fetchall()
     for e in conn.execute("SELECT edge_id,source_clause_id,target_path,action,raw_target_ref FROM amendment_edges").fetchall():
         source_doc = e["source_clause_id"].split(":")[0]
-        source_issue = (conn.execute("SELECT issue_date FROM documents WHERE doc_id=?", (source_doc,)).fetchone() or {})
+        source_issue = (conn.execute("SELECT issue_date,workspace_id FROM documents WHERE doc_id=?", (source_doc,)).fetchone() or {})
+        source_ws = source_issue["workspace_id"] if source_issue else None
         best: tuple[tuple, str] | None = None
         for d in docs:
-            if d["doc_id"] == source_doc:
+            if d["doc_id"] == source_doc or d["workspace_id"] != source_ws:
                 continue
             names = [d["title"] or "", d["ref_no"] or "", *json.loads(d["ref_aliases"] or "[]")]
             scored = [(fuzz.partial_ratio((e["raw_target_ref"] or "").lower(), n.lower()), len(n)) for n in names if n]

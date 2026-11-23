@@ -90,7 +90,7 @@ describe('Composer', () => {
     const onSend = vi.fn()
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <TooltipProvider><Composer onSend={onSend} busy={busy} asOf="2026-11-23" today="2026-11-23" onAsOf={() => {}} scope={null} onScope={() => {}} /></TooltipProvider>
+        <TooltipProvider><Composer workspaceId="ws1" onSend={onSend} busy={busy} asOf="2026-11-23" today="2026-11-23" onAsOf={() => {}} scope={null} onScope={() => {}} /></TooltipProvider>
       </QueryClientProvider>,
     )
     return onSend

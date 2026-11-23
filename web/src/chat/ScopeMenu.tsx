@@ -5,14 +5,16 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
 interface Props {
+  /** The workspace whose documents can be chosen. */
+  workspaceId: string
   /** Selected document ids; null means every document. */
   scope: string[] | null
   onChange: (scope: string[] | null) => void
 }
 
-/** Lets the user limit a chat to some of the uploaded documents. Nothing selected = all documents. */
-export function ScopeMenu({ scope, onChange }: Props) {
-  const { data: docs = [] } = useQuery({ queryKey: ['documents'], queryFn: api.documents })
+/** Lets the user narrow a chat to some documents of its workspace. Nothing selected = every document in the workspace. */
+export function ScopeMenu({ workspaceId, scope, onChange }: Props) {
+  const { data: docs = [] } = useQuery({ queryKey: ['documents', workspaceId], queryFn: () => api.documents(workspaceId) })
   const ready = docs.filter((d) => d.status === 'Ready')
   const chosen = new Set(scope ?? [])
   const label = !scope || scope.length === 0 ? 'All documents' : `${scope.length} of ${ready.length} documents`

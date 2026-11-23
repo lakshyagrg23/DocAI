@@ -34,6 +34,7 @@ flags contradicting clauses side by side, resolves amendment chains to the rule 
 | `.claude/docs/design/answering.md` | Drafting, verification, gate, faithfulness, calculator, Hindi |
 | `.claude/docs/design/model-service.md` | Ollama + aux models service (local / Colab / Modal) |
 | `.claude/docs/runbook.md` | How to run in dev, on Colab, and how to deploy |
+| `.claude/docs/design/workspaces.md` | Touching documents/chats ownership, scope, conflicts/amendment isolation, the sidebar or routes |
 | `.claude/docs/design/ui.md` | (legacy Streamlit design; the live UI is design/ui-react.md) |
 | `.claude/docs/demo-corpus.md` | Generating the 6 demo PDFs (exact text) and `tests/qa.yaml` |
 | `.claude/docs/eval.md` | Metrics, `scripts/eval.py`, release gates |

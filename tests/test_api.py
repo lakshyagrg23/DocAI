@@ -17,6 +17,12 @@ from core.llm.client import ModelUnavailable
 from core.models import Draft, DraftClaim, QueryPlan
 from core.retrieval.hybrid import Retriever
 
+WS = config.DEFAULT_WORKSPACE_ID  # the demo corpus lives in the default workspace
+
+
+def new_chat(client, workspace_id: str = WS) -> dict:
+    return client.post("/api/chats", json={"workspace_id": workspace_id}).json()
+
 
 class Answerer(Facts):
     """Scripted model: plans one sub-question and drafts the two conflicting late-fee claims."""
@@ -91,11 +97,11 @@ def test_health_states(client, monkeypatch):
 
 
 def test_chat_crud_and_validation(client):
-    c = client.post("/api/chats").json()
+    c = new_chat(client)
     assert c["title"] == "New chat" and c["as_of_date"]
     patched = client.patch(f"/api/chats/{c['chat_id']}", json={"title": "  Late fees  ", "as_of_date": "2025-06-01"}).json()
     assert patched["title"] == "Late fees" and patched["as_of_date"] == "2025-06-01"
-    assert any(x["chat_id"] == c["chat_id"] for x in client.get("/api/chats").json())
+    assert any(x["chat_id"] == c["chat_id"] for x in client.get("/api/chats", params={"workspace_id": WS}).json())
     assert client.get(f"/api/chats/{c['chat_id']}/messages").json() == []
     assert client.delete(f"/api/chats/{c['chat_id']}").status_code == 204
     assert client.get("/api/chats/nope/messages").status_code == 404
@@ -105,7 +111,7 @@ def test_chat_crud_and_validation(client):
 # ---- ask (SSE) + enrichment ----------------------------------------------------------
 
 def test_ask_streams_stages_then_a_readable_answer(client):
-    chat = client.post("/api/chats").json()
+    chat = new_chat(client)
     chat_id = chat["chat_id"]
     client.patch(f"/api/chats/{chat_id}", json={"as_of_date": "2026-11-22"})
     r = client.post(f"/api/chats/{chat_id}/ask", json={"question": "What fees apply if I pay an EMI late?"})
@@ -135,13 +141,13 @@ def test_ask_streams_stages_then_a_readable_answer(client):
 
 
 def test_ask_rejects_empty_question_and_unknown_chat(client):
-    chat_id = client.post("/api/chats").json()["chat_id"]
+    chat_id = new_chat(client)["chat_id"]
     assert client.post(f"/api/chats/{chat_id}/ask", json={"question": "   "}).status_code == 422
     assert client.post("/api/chats/nope/ask", json={"question": "hi"}).status_code == 404
 
 
 def test_ask_reports_model_outage_as_an_error_event(client, monkeypatch):
-    chat_id = client.post("/api/chats").json()["chat_id"]
+    chat_id = new_chat(client)["chat_id"]
 
     def boom(*a, **k):
         raise ModelUnavailable("down")
@@ -159,7 +165,7 @@ def test_single_source_lookup_with_encoded_hash(client):
 
 
 def test_documents_outline_and_pages(client):
-    docs = {d["doc_id"]: d for d in client.get("/api/documents").json()}
+    docs = {d["doc_id"]: d for d in client.get("/api/documents", params={"workspace_id": WS}).json()}
     assert docs["D1"]["status_label"] == "Ready" and docs["D3"]["name"] == "Amendment No. 1" and not docs["D1"]["busy"]
     outline = {c["clause_id"]: c for c in client.get("/api/documents/D1/outline", params={"as_of": "2026-11-22"}).json()}
     assert outline["D1:7.2"]["status"] == "superseded" and outline["D1:7.2"]["replaced_by"] == "D4:1"
@@ -177,41 +183,43 @@ def test_upload_validates_pdfs_and_queues(client, monkeypatch, env):
     job = conn.execute("SELECT job_id FROM ingest_jobs WHERE doc_id='D5'").fetchone()["job_id"]
     queued = []
     monkeypatch.setattr("api.routes.documents.pipeline.enqueue", lambda path, c, **kw: queued.append((path, kw)) or job)
-    ok = client.post("/api/documents", files=[("files", ("../evil name.pdf", b"%PDF-1.4 fake", "application/pdf"))])
+    ok = client.post("/api/documents", params={"workspace_id": WS},
+                     files=[("files", ("../evil name.pdf", b"%PDF-1.4 fake", "application/pdf"))])
     assert ok.status_code == 202 and ok.json()[0]["doc_id"] == "D5"
     path, kw = queued[0]
     assert path.parent.parent.name == "uploads" and ".." not in path.name  # sanitised file name, one folder per content
-    assert kw == {"stable_ids": False}  # an upload never picks its doc id from its file name
-    bad = client.post("/api/documents", files=[("files", ("notes.pdf", b"hello", "application/pdf"))])
+    assert kw == {"stable_ids": False, "workspace_id": WS}  # an upload never picks its doc id from its file name
+    bad = client.post("/api/documents", params={"workspace_id": WS},
+                      files=[("files", ("notes.pdf", b"hello", "application/pdf"))])
     assert bad.status_code == 422 and "not a PDF" in bad.json()["detail"]
 
 
 # ---- conflicts and amendments ------------------------------------------------------------
 
 def test_conflicts_endpoint_filters_by_date(client):
-    now = client.get("/api/conflicts", params={"as_of": "2026-11-22"}).json()
+    now = client.get("/api/conflicts", params={"workspace_id": WS, "as_of": "2026-11-22"}).json()
     assert len(now["cards"]) == 1 and {s["doc"] for s in now["cards"][0]["sides"]} == {"D1", "D2", "D5"}
     side = next(s for s in now["cards"][0]["sides"] if s["doc"] == "D2")
     assert side["doc_name"].startswith("Schedule of Charges") and side["clause_label"] == "Table row: Late payment fee", side
-    early = client.get("/api/conflicts", params={"as_of": "2025-06-01"}).json()
+    early = client.get("/api/conflicts", params={"workspace_id": WS, "as_of": "2025-06-01"}).json()
     assert {s["doc"] for s in early["cards"][0]["sides"]} == {"D1", "D2"}  # the circular is not in force yet
-    assert client.get("/api/conflicts", params={"as_of": "2023-01-01"}).json()["cards"] == []
+    assert client.get("/api/conflicts", params={"workspace_id": WS, "as_of": "2023-01-01"}).json()["cards"] == []
 
 
 def test_amendments_endpoint_gives_a_timeline_with_the_current_text(client):
-    data = client.get("/api/amendments", params={"as_of": "2026-11-22"}).json()
+    data = client.get("/api/amendments", params={"workspace_id": WS, "as_of": "2026-11-22"}).json()
     tl = data["timelines"][0]
     assert tl["version_key"] == "D1:7.2" and tl["label"] == "Clause 7.2" and tl["in_force_step"] == 2
     assert [s["doc_name"] for s in tl["steps"]] == ["Personal Loan Agreement", "Amendment No. 1", "Amendment No. 2"]
     assert tl["steps"][1]["source"]["clause_label"] == "Clause 1" and tl["current"]["doc_name"] == "Amendment No. 2"
-    old = client.get("/api/amendments", params={"as_of": "2025-06-01"}).json()["timelines"][0]
+    old = client.get("/api/amendments", params={"workspace_id": WS, "as_of": "2025-06-01"}).json()["timelines"][0]
     assert old["in_force_step"] == 1 and data["unresolved"] == []
 
 
 # ---- per-chat document scope + Markdown export (M10) -----------------------------------
 
 def test_doc_scope_is_validated_stored_and_cleared(client):
-    chat_id = client.post("/api/chats").json()["chat_id"]
+    chat_id = new_chat(client)["chat_id"]
     assert client.patch(f"/api/chats/{chat_id}", json={"doc_scope": ["D1", "NOPE"]}).status_code == 422
     assert client.patch(f"/api/chats/{chat_id}", json={"doc_scope": ["D1"]}).json()["doc_scope"] == ["D1"]
     assert client.patch(f"/api/chats/{chat_id}", json={"title": "x"}).json()["doc_scope"] == ["D1"]  # untouched by other edits
@@ -219,7 +227,7 @@ def test_doc_scope_is_validated_stored_and_cleared(client):
 
 
 def test_scoped_chat_never_cites_other_documents(client):
-    chat_id = client.post("/api/chats").json()["chat_id"]
+    chat_id = new_chat(client)["chat_id"]
     client.patch(f"/api/chats/{chat_id}", json={"as_of_date": "2026-11-22", "doc_scope": ["D1"]})
     r = client.post(f"/api/chats/{chat_id}/ask", json={"question": "What fees apply if I pay an EMI late?"})
     answer = sse(r.text)[-1][1]["assistant"]["answer"]
@@ -229,7 +237,7 @@ def test_scoped_chat_never_cites_other_documents(client):
 
 
 def test_markdown_export_carries_questions_citations_and_quotes(client):
-    chat_id = client.post("/api/chats").json()["chat_id"]
+    chat_id = new_chat(client)["chat_id"]
     client.patch(f"/api/chats/{chat_id}", json={"as_of_date": "2026-11-22"})
     client.post(f"/api/chats/{chat_id}/ask", json={"question": "What fees apply if I pay an EMI late?"})
     r = client.get(f"/api/chats/{chat_id}/export")

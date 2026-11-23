@@ -67,8 +67,15 @@ class VerifiedClaim(BaseModel):
 
 # --- DB rows -----------------------------------------------------------------
 
+class Workspace(BaseModel):
+    workspace_id: str
+    name: str
+    created_at: str
+
+
 class Document(BaseModel):
     doc_id: str
+    workspace_id: str | None = None
     title: str | None = None
     doc_type: str | None = None
     issuer: str | None = None
@@ -88,6 +95,7 @@ class Document(BaseModel):
 
 class Chat(BaseModel):
     chat_id: str
+    workspace_id: str | None = None
     title: str
     created_at: str
     as_of_date: str | None = None

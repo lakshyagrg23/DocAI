@@ -53,7 +53,7 @@ class Retriever:
         self._stamp = stamp  # type: ignore[assignment]
 
     def _allowed(self, doc_scope: list[str] | None) -> np.ndarray | None:
-        if not doc_scope:
+        if doc_scope is None:  # None = unrestricted; an empty list allows nothing (an empty workspace has no evidence)
             return None
         scope = set(doc_scope)
         return np.array([self.windows[w][1] in scope for w in self.index.window_ids], dtype=bool)

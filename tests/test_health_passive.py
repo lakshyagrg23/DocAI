@@ -6,6 +6,8 @@ from api import deps
 from core import config
 from core.llm.client import ModelUnavailable
 
+WS = {"workspace_id": config.DEFAULT_WORKSPACE_ID}
+
 
 @pytest.fixture
 def passive(monkeypatch):
@@ -42,7 +44,7 @@ def test_health_never_calls_the_model(client, passive, monkeypatch):  # noqa: F8
 def test_first_question_wakes_the_model_once(client, passive, monkeypatch):  # noqa: F811
     calls = []
     monkeypatch.setattr(deps.get_model(), "health", lambda: calls.append(1) or {"llm": "ready"}, raising=False)
-    chat = client.post("/api/chats").json()["chat_id"]
+    chat = client.post("/api/chats", json={"workspace_id": WS["workspace_id"]}).json()["chat_id"]
     q = {"question": "What fees apply if I pay an EMI late?"}
     events = sse(client.post(f"/api/chats/{chat}/ask", json=q).text)
     assert [e for e, _ in events][-1] == "answer"
@@ -59,7 +61,7 @@ def test_a_model_that_never_wakes_gives_a_clear_error(client, passive, monkeypat
     monkeypatch.setattr(deps.get_model(), "health", down, raising=False)
     monkeypatch.setattr(config, "MODEL_WAKE_DEADLINE_S", 0.05)
     monkeypatch.setattr(config, "MODEL_WAKE_POLL_S", 0.01)
-    chat = client.post("/api/chats").json()["chat_id"]
+    chat = client.post("/api/chats", json={"workspace_id": WS["workspace_id"]}).json()["chat_id"]
     events = sse(client.post(f"/api/chats/{chat}/ask", json={"question": "hello there"}).text)
     assert events[-1][0] == "error" and "not reachable" in events[-1][1]["message"]
     assert client.get("/api/health").json()["state"] == "offline"

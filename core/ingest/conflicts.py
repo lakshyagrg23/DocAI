@@ -7,6 +7,7 @@ import logging
 import sqlite3
 from itertools import combinations
 
+from core import db
 from core.conflict_rules import ConflictVerdict, FactView, candidate, compare, merge_ranges, overlap
 from core.llm.client import ModelClient, ModelUnavailable
 from core.llm.prompt_loader import load_prompt
@@ -21,11 +22,15 @@ def conflict_id(fact_a: str, fact_b: str) -> str:
 
 
 def load_views(conn: sqlite3.Connection, subject_id: str | None = None,
-               clause_ids: list[str] | None = None) -> list[FactView]:
-    """Facts with their clause's version key, validity interval and a human label."""
+               clause_ids: list[str] | None = None, workspace_id: str | None = None) -> list[FactView]:
+    """Facts with their clause's version key, validity interval and a human label.
+    With `workspace_id` only that workspace's documents are loaded: facts from different workspaces are never compared."""
     sql = ("SELECT f.*, c.version_key, c.path, d.title, d.effective_date FROM facts f "
            "JOIN clauses c ON c.clause_id=f.clause_id JOIN documents d ON d.doc_id=c.doc_id")
     where, args = [], []
+    if workspace_id is not None:
+        where.append("d.workspace_id=?")
+        args.append(workspace_id)
     if subject_id:
         where.append("f.subject_id=?")
         args.append(subject_id)
@@ -93,11 +98,15 @@ def store(conn: sqlite3.Connection, found: list[tuple[FactView, FactView, Confli
 
 
 def run(conn: sqlite3.Connection, doc_id: str, client: ModelClient) -> None:
-    """Post-stage. Re-scans every subject: a new document can change version intervals of old facts, and the corpus is small
-    (the spec's per-subject incremental scan is an optimisation we do not need yet)."""
-    conn.execute("DELETE FROM conflicts WHERE detected_by='ingest'")
+    """Post-stage. Re-scans every subject of the document's workspace: a new document can change version intervals of old
+    facts, and a workspace is small (the spec's per-subject incremental scan is an optimisation we do not need yet).
+    Other workspaces are neither read nor touched: documents are only ever compared with the rest of their own workspace."""
+    ws = db.workspace_of_doc(conn, doc_id)
+    conn.execute("DELETE FROM conflicts WHERE detected_by='ingest' AND fact_a IN ("
+                 "SELECT f.fact_id FROM facts f JOIN clauses c ON c.clause_id=f.clause_id "
+                 "JOIN documents d ON d.doc_id=c.doc_id WHERE d.workspace_id IS ?)", (ws,))
     conn.commit()
-    found = find_conflicts(load_views(conn), client)
+    found = find_conflicts(load_views(conn, workspace_id=ws) if ws is not None else load_views(conn), client)
     log.info("conflicts after %s: %d", doc_id, store(conn, found, "ingest"))
 
 
