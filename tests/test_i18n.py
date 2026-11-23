@@ -48,7 +48,9 @@ def test_english_question_never_uses_the_models_rewrite():
     assert english_question(plan, "What is the late fee?") == "What is the late fee?"
     hi = QueryPlan(question_en="What is the interest rate?", sub_questions=["What is the interest rate?"])
     assert english_question(hi, "ब्याज दर क्या है?") == "What is the interest rate?"
-    assert english_question(QueryPlan(sub_questions=["x"]), "ब्याज दर क्या है?") == "ब्याज दर क्या है?"  # no translation: ask as is
+    assert english_question(QueryPlan(sub_questions=[""]), "ब्याज दर क्या है?") == "ब्याज दर क्या है?"  # no translation: ask as is
+    untranslated = QueryPlan(question_en="ब्याज दर क्या है?", sub_questions=["What is the interest rate?"])
+    assert english_question(untranslated, "ब्याज दर क्या है?") == "What is the interest rate?"  # seen live on qwen3.5:4b
     assert sanitise(hi, "ब्याज दर क्या है?").question_en == "What is the interest rate?"
 
 
@@ -70,7 +72,7 @@ def _claim(text: str) -> VerifiedClaim:
 def test_localize_keeps_only_number_safe_hindi():
     claims = [_claim("The interest rate is 13.5% per annum."), _claim("The late fee is ₹500.")]
     client = FakeClient(["ब्याज दर 13.5% प्रति वर्ष है।", "विलंब शुल्क ₹750 है।"])  # second one changes the number
-    missing_local, _ = translate.localize(claims, ["the processing fee"], FakeClient(["प्रोसेसिंग शुल्क"]))
+    missing_local, _ = translate.localize([], ["the processing fee"], FakeClient(["प्रोसेसिंग शुल्क"]))
     assert missing_local == ["प्रोसेसिंग शुल्क"]
     claims = [_claim("The interest rate is 13.5% per annum."), _claim("The late fee is ₹500.")]
     translate.localize(claims, [], client)

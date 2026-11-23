@@ -37,7 +37,7 @@ def to_hindi(texts: list[str], client: ModelClient) -> tuple[list[str | None], s
     if len(out.items) != len(todo):  # a misaligned list cannot be trusted item by item
         return [None] * len(texts), version
     res: list[str | None] = []
-    for en, hi in zip(todo, out.items, strict=True):
+    for en, hi in zip(todo, out.items):
         hi = hi.strip()
         ok = hi and i18n.DEVANAGARI.search(hi) and i18n.same_numbers(en, hi)  # number guard + must really be Hindi
         res.append(hi if ok else None)
@@ -47,6 +47,6 @@ def to_hindi(texts: list[str], client: ModelClient) -> tuple[list[str | None], s
 def localize(claims: list[VerifiedClaim], missing: list[str], client: ModelClient) -> tuple[list[str], str]:
     """Fill `claim.text_local` in place and return the Hindi `missing` list (English where translation was refused)."""
     out, version = to_hindi([c.text for c in claims] + missing, client)
-    for c, t in zip(claims, out[:len(claims)], strict=True):
+    for c, t in zip(claims, out[:len(claims)]):
         c.text_local = t
-    return [t or m for m, t in zip(missing, out[len(claims):], strict=True)], version
+    return [t or m for m, t in zip(missing, out[len(claims):])], version
