@@ -25,7 +25,11 @@ def english_question(plan: QueryPlan, question: str) -> str:
     q = i18n.to_ascii_digits(question).strip()
     if i18n.detect_language(q) == "en":
         return q
-    return i18n.to_ascii_digits(plan.question_en).strip() or q
+    cand = i18n.to_ascii_digits(plan.question_en).strip()
+    if cand and i18n.detect_language(cand) == "en":
+        return cand
+    subs = " ".join(x.strip() for x in plan.sub_questions if x and x.strip())  # the model left it in Hindi: its English sub-questions
+    return subs if subs and i18n.detect_language(subs) == "en" else q
 
 
 def sanitise(plan: QueryPlan, question: str) -> QueryPlan:
