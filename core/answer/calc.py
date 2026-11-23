@@ -181,9 +181,9 @@ def run(plan: CalcPlan, question: str, claims: list[VerifiedClaim]) -> tuple[dic
             return _out(plan.kind, inputs, steps, result), [], used
         results = []
         for combo in itertools.islice(itertools.product(*(options[n] for n in varying)), MAX_VARIANTS):
-            vals = {n: fixed[n][0] for n in fixed} | {n: f.value for n, f in zip(varying, combo, strict=True)}
+            vals = {n: fixed[n][0] for n in fixed} | {n: f.value for n, f in zip(varying, combo)}
             res, st = _compute(plan.kind, vals)
-            for n, f in zip(varying, combo, strict=True):
+            for n, f in zip(varying, combo):
                 inputs.append({"name": f"{labels[n]} (option {len(results) + 1})", "value": f.value, "span_id": f.span_id})
             steps += [f"Option {len(results) + 1}: {s}" for s in st]
             results.append(res)
