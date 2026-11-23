@@ -63,6 +63,7 @@ class VerifiedClaim(BaseModel):
     verdict: Literal["supported", "unsupported", "contradicted"]
     checks: ClaimCheck
     reason: str | None = None
+    text_local: str | None = None  # number-guarded Hindi wording of `text` (never replaces it; answering.md §6)
 
 
 # --- DB rows -----------------------------------------------------------------
@@ -169,6 +170,7 @@ class QueryPlan(BaseModel):
     """LLM output of the planner (retrieval.md §1)."""
 
     intent: Literal["lookup", "multi", "current_rule", "history", "calculation"] = "lookup"
+    question_en: str = ""  # the question in English (the planner translates Hindi; empty = same as asked)
     sub_questions: list[str]
     as_of_override: str | None = None
     calc: CalcPlan = CalcPlan()
@@ -186,6 +188,7 @@ class AnswerJSON(BaseModel):
     blocked_claims: list[VerifiedClaim] = []
     disagreements: list[dict] = []
     missing_evidence: list[str] = []
+    missing_local: list[str] = []  # Hindi wording of missing_evidence (same order), empty when the answer is English
     chains: list[dict] = []
     calculation: dict | None = None
     faithfulness_pct: float | None = None

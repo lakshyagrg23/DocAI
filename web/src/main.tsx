@@ -10,6 +10,7 @@ import { AmendmentsPage } from '@/pages/Amendments'
 import { ConflictsPage } from '@/pages/Conflicts'
 import { LibraryPage } from '@/pages/Library'
 import { WorkspacesPage } from '@/pages/Workspaces'
+import { I18nProvider } from '@/state/i18n'
 import { UiProvider } from '@/state/ui'
 import { TooltipProvider } from '@/ui/primitives'
 import './index.css'
@@ -19,6 +20,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5_
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
+      <I18nProvider>
       <AccessGate>
       <UiProvider>
         <TooltipProvider delayDuration={150}>
@@ -41,6 +43,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </TooltipProvider>
       </UiProvider>
       </AccessGate>
+      </I18nProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 )

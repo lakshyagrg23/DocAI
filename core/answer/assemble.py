@@ -9,12 +9,13 @@ import sqlite3
 import time
 from collections.abc import Callable
 
-from core import config, db
+from core import config, db, i18n
 from core import versions as version_graph
 from core.answer import calc, disagree
 from core.answer.draft import make_draft
-from core.answer.gate import ABSTAIN_TEXT, gate
-from core.answer.plan import effective_as_of, make_plan, search_queries
+from core.answer.gate import gate
+from core.answer.plan import effective_as_of, english_question, make_plan, search_queries
+from core.answer.translate import localize
 from core.answer.verify import verify_claims
 from core.llm.client import ModelClient, get_client
 from core.models import AnswerJSON
@@ -43,12 +44,14 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
     t0 = time.perf_counter()
     plan, versions["plan"] = make_plan(question, client)
     as_of_date = effective_as_of(plan, as_of or (chat.as_of_date if chat else None))
+    lang = i18n.resolve_language(chat.language if chat else None, question)  # language of the displayed answer
+    q_en = english_question(plan, question)  # the pipeline (retrieval, draft, checks, calculator) runs in English
     timings["plan"] = _ms(t0)
 
     stage("Retrieving")
     t0 = time.perf_counter()
     scope = db.chat_doc_scope(conn, chat) if chat else None  # the chat's workspace, narrowed by its picker (ADR-024)
-    hits = retriever.retrieve(search_queries(plan, question), scope) if scope != [] else []  # [] = nothing to search
+    hits = retriever.retrieve(search_queries(plan, q_en, question), scope) if scope != [] else []  # [] = nothing to search
     pack = restrict(build_pack(conn, hits, as_of_date), scope)  # amendment versions can live in other documents
     disagree.recheck(conn, sorted({s.clause_id for s in pack.spans}))
     disagree.add_partners(conn, pack, as_of_date, scope)  # the other half of any conflict in effect must be shown too
@@ -59,7 +62,7 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
     if pack.spans:
         stage("Drafting")
         t0 = time.perf_counter()
-        draft, versions["draft"] = make_draft(question, as_of_date, pack, client, plan.calc.kind)
+        draft, versions["draft"] = make_draft(q_en, as_of_date, pack, client, plan.calc.kind)
         timings["draft"] = _ms(t0)
         if draft is None:
             drafted_ok, missing = False, ["Drafting failed"]
@@ -67,7 +70,7 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
             missing = draft.missing
             stage(f"Verifying {len(draft.claims)} claims")
             t0 = time.perf_counter()
-            claims = verify_claims(draft.claims, pack, client, question)
+            claims = verify_claims(draft.claims, pack, client, q_en)
             stage("Checking conflicts")
             disagree.mark_contradicted(conn, claims, as_of_date, scope)
             timings["verify"] = _ms(t0)
@@ -79,7 +82,7 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
         cited += [s.clause_id for s in pack.spans]
     chains = version_graph.chains(conn, list(dict.fromkeys(cited)), as_of_date)
     disagreements = disagree.build_disagreements(conn, claims, as_of_date)
-    calculation, calc_missing, used = calc.run(plan.calc, question, claims) if plan.calc.kind != "none" else (None, [], set())
+    calculation, calc_missing, used = calc.run(plan.calc, q_en, claims) if plan.calc.kind != "none" else (None, [], set())
     if calculation and calculation["result"] is not None:
         missing = []  # every required input was found, so the draft's own "missing" notes no longer apply
     if missing and not any(c.verdict != "unsupported" for c in claims):
@@ -90,9 +93,17 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
             result.status = "answered"  # all inputs were stated in the question or verified; the working is the answer
         inputs_shown = {id(claims[i]) for i in used}
         result.supported = [c for c in result.supported if id(c) not in inputs_shown]  # shown in the calculation card
+    shown = result.supported + result.contested
+    missing_local: list[str] = []
+    if lang == "hi" and (shown or result.missing):  # after verification: only rewords what is already verified
+        stage("Translating")
+        t0 = time.perf_counter()
+        missing_local, versions["translate"] = localize(shown, result.missing, client)
+        timings["translate"] = _ms(t0)
+        calculation = i18n.localize_calculation(calculation, lang)
     ans = AnswerJSON(
-        status=result.status, question=question, question_en=question, as_of_date=as_of_date, intent=plan.intent,
-        claims=result.supported + result.contested, blocked_claims=result.blocked, missing_evidence=result.missing,
+        status=result.status, question=question, question_en=q_en, language=lang, as_of_date=as_of_date, intent=plan.intent,
+        claims=shown, blocked_claims=result.blocked, missing_evidence=result.missing, missing_local=missing_local,
         disagreements=disagreements, calculation=calculation,
         chains=chains if result.status != "abstained" else [],
         faithfulness_pct=result.faithfulness_pct, drafted=result.drafted, passed=result.passed,
@@ -105,14 +116,15 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
 
 def render_text(ans: AnswerJSON) -> str:
     """Plain-text form of the answer (stored as message content, used by exports)."""
+    hi = ans.language == "hi"
     if ans.status == "abstained":
-        lines = [ABSTAIN_TEXT]
+        lines = [i18n.ABSTAIN["hi" if hi else "en"]]
     else:
-        lines = [c.text for c in ans.claims]
+        lines = [(c.text_local or c.text) if hi else c.text for c in ans.claims]
     if ans.calculation and ans.calculation.get("result") is not None:
         lines += [f"Result: {calc.inr(ans.calculation['result'])}"]
     if ans.missing_evidence:
-        lines += ["Missing: " + "; ".join(ans.missing_evidence)]
+        lines += [("अधूरी जानकारी: " if hi else "Missing: ") + "; ".join((ans.missing_local or ans.missing_evidence) if hi else ans.missing_evidence)]
     return "\n".join(lines)
 
 
