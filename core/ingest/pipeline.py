@@ -44,8 +44,10 @@ def _set_job(conn: sqlite3.Connection, job_id: str, state: str, error: str | Non
     conn.commit()
 
 
-def enqueue(path: Path | str, conn: sqlite3.Connection | None = None, start_worker: bool = True) -> str:
-    """Register the file cheaply (sha, id, row) and queue it. A known sha returns the existing doc's latest job."""
+def enqueue(path: Path | str, conn: sqlite3.Connection | None = None, start_worker: bool = True,
+            stable_ids: bool = True) -> str:
+    """Register the file cheaply (sha, id, row) and queue it. A known sha returns the existing doc's latest job.
+    `stable_ids=False` (the upload API) ignores D1_-style file names when choosing the doc id."""
     own = conn is None
     conn = conn or db.init_db()
     path = Path(path)
@@ -62,7 +64,7 @@ def enqueue(path: Path | str, conn: sqlite3.Connection | None = None, start_work
             return job["job_id"]
         doc_id = row["doc_id"]
     else:
-        doc_id = register.make_doc_id(path.name, sha)
+        doc_id = register.make_doc_id(path.name, sha, stable_ids)
         db.upsert_document(conn, register.build_document(doc_id, path, sha, None))
     job_id = db.new_id("job")
     now = db.now_iso()

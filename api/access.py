@@ -87,10 +87,17 @@ class Limiter:
 limiter = Limiter()
 
 
+TRUSTED_PROXY_HOPS = int(os.environ.get("TRUSTED_PROXY_HOPS", "1"))  # proxies in front of the app that append to X-Forwarded-For
+
+
 def visitor(request: Request) -> str:
-    """The caller's address: the first X-Forwarded-For entry behind Modal's proxy, else the socket address."""
-    fwd = request.headers.get("x-forwarded-for", "")
-    return fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    """The caller's address. Each proxy appends the peer it saw to X-Forwarded-For, so the entries a client writes
+    itself are on the LEFT and cannot be trusted: take the entry TRUSTED_PROXY_HOPS from the right. Without the
+    header (local dev) the socket address is used."""
+    parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    if parts and TRUSTED_PROXY_HOPS > 0:
+        return parts[max(len(parts) - TRUSTED_PROXY_HOPS, 0)]
+    return request.client.host if request.client else "unknown"
 
 
 def limit_ask(request: Request) -> None:

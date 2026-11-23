@@ -1,6 +1,7 @@
 """Documents: list with live ingest status, upload, clause outline, page images (design/ui-react.md §5)."""
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from pathlib import Path
@@ -59,9 +60,11 @@ async def upload(request: Request, files: list[UploadFile],
             raise HTTPException(413, f"{name} is larger than {access.UPLOAD_MAX_BYTES // (1024 * 1024)} MB")
         if not name.lower().endswith(".pdf") or not data.startswith(b"%PDF"):
             raise HTTPException(422, f"{name} is not a PDF file")
-        dest = dest_dir / name
+        sub = dest_dir / hashlib.sha256(data).hexdigest()[:16]  # one folder per content: same name never overwrites a file
+        sub.mkdir(parents=True, exist_ok=True)
+        dest = sub / name
         dest.write_bytes(data)
-        job = pipeline.enqueue(dest, conn)
+        job = pipeline.enqueue(dest, conn, stable_ids=False)
         doc_id = conn.execute("SELECT doc_id FROM ingest_jobs WHERE job_id=?", (job,)).fetchone()["doc_id"]
         out.append(_doc_out(conn, conn.execute("SELECT * FROM documents WHERE doc_id=?", (doc_id,)).fetchone()))
     return out
