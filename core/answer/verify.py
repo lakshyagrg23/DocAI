@@ -89,7 +89,7 @@ def verify_claims(claims: list[DraftClaim], pack: EvidencePack, client: ModelCli
             scores = client.nli([(p, h) for _, p, h in pending])
         except ModelUnavailable:
             scores = [None] * len(pending)
-        for (i, _, _), score in zip(pending, scores, strict=True):
+        for (i, _, _), score in zip(pending, scores):
             vc = results[i]
             vc.checks.hhem = score
             if score is None:

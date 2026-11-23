@@ -6,6 +6,7 @@ a claim's numbers can be checked against the source text with the very same rule
 from __future__ import annotations
 
 import re
+from typing import Union
 
 from core.models import FactValue
 
@@ -41,7 +42,7 @@ WORD_NUMS.update({"thirty": 30.0, "forty": 40.0, "fifty": 50.0, "sixty": 60.0, "
                   "ninety": 90.0, "hundred": 100.0, "first": 1.0, "second": 2.0, "third": 3.0, "fourth": 4.0,
                   "fifth": 5.0, "sixth": 6.0, "seventh": 7.0, "eighth": 8.0, "ninth": 9.0, "tenth": 10.0})
 
-Token = tuple[str, float | str]  # ("num", 500.0) | ("pct", 4.0) | ("date", "2025-04-01")
+Token = tuple[str, Union[float, str]]  # ("num", 500.0) | ("pct", 4.0) | ("date", "2025-04-01")
 
 
 def normalize_text(s: str) -> str:

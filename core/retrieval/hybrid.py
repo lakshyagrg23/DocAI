@@ -85,7 +85,7 @@ class Retriever:
         scores: list[float] = []
         for i in range(0, len(texts), config.RERANK_CHUNK):  # short requests: CPU reranker must answer within AUX_TIMEOUT_S
             scores += self.client.rerank(query, texts[i:i + config.RERANK_CHUNK])
-        ranked = sorted(zip(cands, scores, strict=True), key=lambda x: (-x[1], x[0]))[:config.RERANK_KEEP]
+        ranked = sorted(zip(cands, scores), key=lambda x: (-x[1], x[0]))[:config.RERANK_KEEP]
         return [Hit(window_id=w, clause_id=self.windows[w][0], doc_id=self.windows[w][1], score=float(s),
                     rrf=fused[w], dense_rank=dense_rank.get(w), bm25_rank=bm25_rank.get(w), query=query)
                 for w, s in ranked]

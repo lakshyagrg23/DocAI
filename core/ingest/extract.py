@@ -81,7 +81,7 @@ def run(conn: sqlite3.Connection, doc_id: str, client: ModelClient) -> None:
     with ThreadPoolExecutor(max_workers=config.EXTRACT_WORKERS) as pool:
         results = list(pool.map(lambda j: _extract_batch(client, j[1], system), jobs))
     n = 0
-    for (spans, _), out in zip(jobs, results, strict=True):
+    for (spans, _), out in zip(jobs, results):
         if out is None:
             continue
         by_id = {s["span_id"]: s["text"] for s in spans}
