@@ -108,6 +108,17 @@ def build_pack(conn: sqlite3.Connection, hits: list[Hit], as_of: str,
     return pack
 
 
+def restrict(pack: EvidencePack, doc_scope: list[str] | None) -> EvidencePack:
+    """Keep only spans from the chat's selected documents (None or empty = all documents)."""
+    if not doc_scope:
+        return pack
+    keep = set(doc_scope)
+    pack.spans = [s for s in pack.spans if s.doc_id in keep]
+    pack.context_spans = [s for s in pack.context_spans if s.doc_id in keep]
+    pack.tokens = sum(approx_tokens(s.line) for s in pack.spans)
+    return pack
+
+
 def pack_to_json(pack: EvidencePack) -> str:
     return json.dumps({"spans": [s.span_id for s in pack.spans], "context": [s.span_id for s in pack.context_spans],
                        "tokens": pack.tokens, "truncated": pack.truncated})

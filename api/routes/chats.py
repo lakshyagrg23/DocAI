@@ -9,10 +9,10 @@ import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
-from api import access, deps, serialize
+from api import access, deps, export, serialize
 from core import db
 from core.answer import assemble
 from core.llm.client import ModelUnavailable
@@ -28,6 +28,7 @@ class ChatPatch(BaseModel):
     title: str | None = None
     as_of_date: str | None = None
     language: str | None = None
+    doc_scope: list[str] | None = None  # [] clears the scope (all documents)
 
 
 class Ask(BaseModel):
@@ -54,7 +55,12 @@ def patch_chat(chat_id: str, body: ChatPatch, conn: sqlite3.Connection = Depends
         raise HTTPException(404, "chat not found")
     if body.title and body.title.strip():
         db.rename_chat(conn, chat_id, body.title.strip())
-    db.update_chat_settings(conn, chat_id, as_of_date=body.as_of_date, language=body.language)
+    if body.doc_scope:
+        known = {r["doc_id"] for r in conn.execute("SELECT doc_id FROM documents")}
+        unknown = [d for d in body.doc_scope if d not in known]
+        if unknown:
+            raise HTTPException(422, f"unknown document: {unknown[0]}")
+    db.update_chat_settings(conn, chat_id, as_of_date=body.as_of_date, language=body.language, doc_scope=body.doc_scope)
     return chat_out(db.get_chat(conn, chat_id))  # type: ignore[arg-type]
 
 
@@ -68,6 +74,16 @@ def messages(chat_id: str, conn: sqlite3.Connection = Depends(deps.conn_dep)) ->
     if db.get_chat(conn, chat_id) is None:
         raise HTTPException(404, "chat not found")
     return [serialize.message_out(conn, m) for m in db.list_messages(conn, chat_id)]
+
+
+@router.get("/chats/{chat_id}/export")
+def export_chat(chat_id: str, conn: sqlite3.Connection = Depends(deps.conn_dep)) -> Response:
+    built = export.build(conn, chat_id)
+    if built is None:
+        raise HTTPException(404, "chat not found")
+    name, text = built
+    return Response(text, media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 def _sse(event: str, data: dict) -> str:

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, PanelLeftOpen, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertCircle, Download, PanelLeftOpen, ShieldCheck, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, ask } from '@/lib/api'
@@ -48,6 +48,7 @@ export function ChatPage() {
   const [stage, setStage] = useState<StageEvent | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draftAsOf, setDraftAsOf] = useState(today)
+  const [draftScope, setDraftScope] = useState<string[] | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
 
   const { data: chats = [] } = useQuery({ queryKey: ['chats'], queryFn: api.chats })
@@ -56,6 +57,7 @@ export function ChatPage() {
   const { data: examples = [] } = useQuery({ queryKey: ['examples'], queryFn: api.examples, staleTime: Infinity })
   const { data: health } = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15_000 })
   const asOf = chat?.as_of_date ?? draftAsOf
+  const scope = chat ? chat.doc_scope : draftScope
 
   const run = async (id: string, question: string) => {
     setPending(question)
@@ -76,7 +78,9 @@ export function ChatPage() {
   const submit = async (question: string) => {
     if (chatId) return run(chatId, question)
     const c = await api.createChat()
-    if (draftAsOf !== today) await api.patchChat(c.chat_id, { as_of_date: draftAsOf })
+    if (draftAsOf !== today || draftScope) {
+      await api.patchChat(c.chat_id, { ...(draftAsOf !== today && { as_of_date: draftAsOf }), ...(draftScope && { doc_scope: draftScope }) })
+    }
     await qc.invalidateQueries({ queryKey: ['chats'] })
     navigate(`/chat/${c.chat_id}`, { state: { ask: question } })
   }
@@ -101,6 +105,12 @@ export function ChatPage() {
     void qc.invalidateQueries({ queryKey: ['chats'] })
   }
 
+  const changeScope = async (next: string[] | null) => {
+    if (!chatId) return setDraftScope(next)
+    await api.patchChat(chatId, { doc_scope: next ?? [] })
+    void qc.invalidateQueries({ queryKey: ['chats'] })
+  }
+
   const list = messages.data ?? []
   const empty = !pending && list.length === 0 && !messages.isLoading
 
@@ -108,7 +118,12 @@ export function ChatPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
         {!sidebarOpen && <Button size="icon" variant="ghost" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar"><PanelLeftOpen className="h-5 w-5" /></Button>}
-        <h1 className="truncate text-sm font-medium">{chat?.title ?? 'New chat'}</h1>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{chat?.title ?? 'New chat'}</h1>
+        {chatId && list.length > 0 && (
+          <a href={api.exportUrl(chatId)} download className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted hover:bg-sunken" aria-label="Download this chat as Markdown">
+            <Download className="h-3.5 w-3.5" /> Export
+          </a>
+        )}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -136,7 +151,7 @@ export function ChatPage() {
       </div>
 
       <Composer onSend={(q) => void submit(q)} busy={Boolean(pending)} asOf={asOf} onAsOf={(d) => void changeAsOf(d)} today={today}
-        offline={health?.state === 'offline'} autoFocus />
+        offline={health?.state === 'offline'} autoFocus scope={scope} onScope={(s) => void changeScope(s)} />
     </div>
   )
 }

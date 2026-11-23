@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Tooltip } from '@/ui/primitives'
 import { cn } from '@/lib/cn'
 import { fmtDate } from '@/lib/plain'
+import { ScopeMenu } from './ScopeMenu'
 
 interface Props {
   onSend: (question: string) => void
@@ -12,9 +13,11 @@ interface Props {
   today: string
   offline?: boolean
   autoFocus?: boolean
+  scope: string[] | null
+  onScope: (scope: string[] | null) => void
 }
 
-export function Composer({ onSend, busy, asOf, onAsOf, today, offline, autoFocus }: Props) {
+export function Composer({ onSend, busy, asOf, onAsOf, today, offline, autoFocus, scope, onScope }: Props) {
   const [text, setText] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
@@ -54,6 +57,8 @@ export function Composer({ onSend, busy, asOf, onAsOf, today, offline, autoFocus
               <input type="date" value={asOf} onChange={(e) => e.target.value && onAsOf(e.target.value)} aria-label="Rules as of date" className="sr-only" />
             </label>
           </Tooltip>
+          <div className="flex-1" />
+          <ScopeMenu scope={scope} onChange={onScope} />
           <button
             type="button"
             onClick={send}

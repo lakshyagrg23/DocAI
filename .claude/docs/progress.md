@@ -106,3 +106,8 @@ what's next, and gotchas the next session must know (version pins, API quirks, t
 ## 2026-11-23 (evening) — passive health fix; GPU app redeployed in on-demand mode
 - ADR-022: `/api/health` no longer wakes the GPU on Modal; a question wakes it with a visible "Waking the model" stage. 5 tests (`tests/test_health_passive.py`), 24 API tests pass, front-end 21 pass. Verified live: three health calls -> "asleep", 0 `docai-model` containers.
 - Both Modal apps deployed. GPU app: on demand (sleeps ~15 min after the last request; first question after a sleep waits ~3 min). Stop it with `modal app stop docai-model --yes` when finished testing. The user is testing the live URL.
+
+## 2026-11-23 (night) — M10 part 1: document scope + Markdown export
+- Backend: scope enforced in pack, partners and conflict lookups (ADR-023); `api/export.py` and `/api/chats/{id}/export`; 3 new API tests (204 backend tests pass). Front end: `ScopeMenu` in the composer, Export link, 3 new tests (24 pass); UI rebuilt and the menu checked in a real browser (local, no model use).
+- Not deployed yet: Hindi (M10 part 2) comes first, then one GPU session and one redeploy.
+- Next: Hindi per design/answering.md §6 (detect, translate question, number guard, UI strings), tested locally against Ollama; q40 on the GPU session.

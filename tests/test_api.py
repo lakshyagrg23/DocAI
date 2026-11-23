@@ -204,3 +204,38 @@ def test_amendments_endpoint_gives_a_timeline_with_the_current_text(client):
     assert tl["steps"][1]["source"]["clause_label"] == "Clause 1" and tl["current"]["doc_name"] == "Amendment No. 2"
     old = client.get("/api/amendments", params={"as_of": "2025-06-01"}).json()["timelines"][0]
     assert old["in_force_step"] == 1 and data["unresolved"] == []
+
+
+# ---- per-chat document scope + Markdown export (M10) -----------------------------------
+
+def test_doc_scope_is_validated_stored_and_cleared(client):
+    chat_id = client.post("/api/chats").json()["chat_id"]
+    assert client.patch(f"/api/chats/{chat_id}", json={"doc_scope": ["D1", "NOPE"]}).status_code == 422
+    assert client.patch(f"/api/chats/{chat_id}", json={"doc_scope": ["D1"]}).json()["doc_scope"] == ["D1"]
+    assert client.patch(f"/api/chats/{chat_id}", json={"title": "x"}).json()["doc_scope"] == ["D1"]  # untouched by other edits
+    assert client.patch(f"/api/chats/{chat_id}", json={"doc_scope": []}).json()["doc_scope"] is None
+
+
+def test_scoped_chat_never_cites_other_documents(client):
+    chat_id = client.post("/api/chats").json()["chat_id"]
+    client.patch(f"/api/chats/{chat_id}", json={"as_of_date": "2026-11-22", "doc_scope": ["D1"]})
+    r = client.post(f"/api/chats/{chat_id}/ask", json={"question": "What fees apply if I pay an EMI late?"})
+    answer = sse(r.text)[-1][1]["assistant"]["answer"]
+    shown = {s for c in answer["claims"] for s in c["span_ids"]}
+    assert shown == {"D1:8.1#s1"}  # the scripted draft also cites D2, which is outside the scope: it must not be shown
+    assert answer["status"] != "conflict"  # only one side is in scope, so there is nothing to compare
+
+
+def test_markdown_export_carries_questions_citations_and_quotes(client):
+    chat_id = client.post("/api/chats").json()["chat_id"]
+    client.patch(f"/api/chats/{chat_id}", json={"as_of_date": "2026-11-22"})
+    client.post(f"/api/chats/{chat_id}/ask", json={"question": "What fees apply if I pay an EMI late?"})
+    r = client.get(f"/api/chats/{chat_id}/export")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/markdown")
+    assert 'filename="what-fees-apply-if-i-pay.md"' in r.headers["content-disposition"]
+    md = r.text
+    assert "## Question 1" in md and "What fees apply if I pay an EMI late?" in md
+    assert "**Documents disagree**" in md and "**Sources**" in md
+    assert "[1] Personal Loan Agreement, Clause 8.1, page 4" in md
+    assert "> " in md and "₹500" in md
+    assert client.get("/api/chats/nope/export").status_code == 404
