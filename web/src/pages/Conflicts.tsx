@@ -6,6 +6,7 @@ import { PageShell } from '@/layout/PageShell'
 import { api } from '@/lib/api'
 import { fmtDate, localToday } from '@/lib/plain'
 import type { DisagreementSide } from '@/lib/types'
+import { useWorkspaceId } from '@/state/workspace'
 import { Skeleton } from '@/ui/primitives'
 import { SourceDialog, type ViewSource } from '@/ui/SourceDialog'
 
@@ -20,9 +21,10 @@ export function DateField({ value, onChange, label }: { value: string; onChange:
 }
 
 export function ConflictsPage() {
+  const wid = useWorkspaceId()
   const [asOf, setAsOf] = useState(localToday)
   const [view, setView] = useState<ViewSource | null>(null)
-  const { data, isLoading } = useQuery({ queryKey: ['conflicts', asOf], queryFn: () => api.conflicts(asOf) })
+  const { data, isLoading } = useQuery({ queryKey: ['conflicts', wid, asOf], queryFn: () => api.conflicts(wid, asOf) })
 
   const open = (side: DisagreementSide & { pages?: number | null; bboxes?: number[][]; page_width?: number | null; page_height?: number | null }) =>
     setView({ doc_id: side.doc, doc_name: side.doc_name ?? side.doc_title ?? side.doc, clause_label: side.clause_label ?? side.clause_id, page: side.page ?? 1,
@@ -31,7 +33,7 @@ export function ConflictsPage() {
   return (
     <PageShell
       title="Conflicts"
-      subtitle="Places where your documents give different answers to the same question. Only rules that apply on the chosen date are compared."
+      subtitle="Places where the documents in this workspace give different answers to the same question. Only rules that apply on the chosen date are compared."
       actions={<DateField label="Rules as of" value={asOf} onChange={setAsOf} />}
     >
       {isLoading && <Skeleton className="h-48" />}

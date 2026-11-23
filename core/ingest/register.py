@@ -31,11 +31,18 @@ def sha256_file(path: Path | str) -> str:
     return h.hexdigest()
 
 
-def make_doc_id(filename: str, sha: str, stable_ids: bool = True) -> str:
+def make_doc_id(filename: str, sha: str, stable_ids: bool = True, workspace_id: str | None = None) -> str:
     """D1_/H1_ file names keep a stable id, for trusted local ingest only. Uploads pass stable_ids=False: a visitor must
-    not be able to pick the id of (and so overwrite) an existing document by naming the file."""
+    not be able to pick the id of (and so overwrite) an existing document by naming the file.
+
+    The same PDF can be uploaded to several workspaces, and every upload is its own document, so outside the default workspace
+    the id also depends on the workspace (the default keeps the plain sha prefix, so ids that existed before stay valid)."""
     m = DEMO_NAME.match(filename) if stable_ids else None
-    return m.group(1).upper() if m else "U" + sha[:6]
+    if m:
+        return m.group(1).upper()
+    if workspace_id in (None, config.DEFAULT_WORKSPACE_ID):
+        return "U" + sha[:6]
+    return "U" + hashlib.sha256(f"{workspace_id}:{sha}".encode()).hexdigest()[:6]
 
 
 def first_page_text(path: Path | str) -> str:

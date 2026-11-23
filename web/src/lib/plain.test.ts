@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseSse } from './api'
 import type { DisagreementSide } from './types'
 import {
-  conflictNotes, dayBefore, describeSide, fmtDate, groupByDay, localToday, periodLabel, plainReason, snippet, statusLabel,
+  conflictNotes, dayBefore, describeSide, fmtDate, groupByDay, localToday, periodLabel, plainReason, plural, snippet, statusLabel,
   supportStrength, unquote, verifiedSummary,
 } from './plain'
 
@@ -25,6 +25,12 @@ describe('dates', () => {
     expect(statusLabel('in_force', '2026-11-23', '2026-11-23')).toBe('Applies today')
     expect(statusLabel('in_force', '2025-06-01', '2026-11-23')).toBe('Applied on 1 Jun 2025')
     expect(statusLabel('superseded', '2025-06-01', '2026-11-23')).toBe('Replaced')
+  })
+})
+
+describe('counts', () => {
+  it('pluralises nouns', () => {
+    expect([plural(0, 'chat'), plural(1, 'chat'), plural(2, 'document')]).toEqual(['0 chats', '1 chat', '2 documents'])
   })
 })
 

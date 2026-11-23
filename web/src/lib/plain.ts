@@ -167,3 +167,6 @@ export function snippet(text: string, max = 160): string {
   const t = unquote(text).replace(/\s+/g, ' ')
   return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t
 }
+
+/** "1 document", "3 documents". */
+export const plural = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? '' : 's'}`

@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { CLAUSE_STATUS_COPY, fmtDate, snippet } from '@/lib/plain'
 import type { Doc } from '@/lib/types'
+import { useWorkspace, useWorkspaceId } from '@/state/workspace'
 import { Badge, Card, Skeleton } from '@/ui/primitives'
 import { SourceDialog, type ViewSource } from '@/ui/SourceDialog'
 
@@ -63,19 +64,27 @@ function DocCard({ doc, onView }: { doc: Doc; onView: (s: ViewSource) => void })
 
 export function LibraryPage() {
   const qc = useQueryClient()
+  const wid = useWorkspaceId()
+  const workspace = useWorkspace()
   const input = useRef<HTMLInputElement>(null)
   const [drag, setDrag] = useState(false)
   const [view, setView] = useState<ViewSource | null>(null)
   const { data: docs = [], isLoading } = useQuery({
-    queryKey: ['documents'],
-    queryFn: api.documents,
+    queryKey: ['documents', wid],
+    queryFn: () => api.documents(wid),
     refetchInterval: (q) => (q.state.data?.some((d) => d.busy) ? 2000 : false),
   })
-  const upload = useMutation({ mutationFn: (files: File[]) => api.upload(files), onSuccess: () => qc.invalidateQueries({ queryKey: ['documents'] }) })
+  const upload = useMutation({
+    mutationFn: (files: File[]) => api.upload(wid, files),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['documents', wid] }); void qc.invalidateQueries({ queryKey: ['workspaces'] }) },
+  })
   const pick = (files: FileList | null) => { if (files?.length) upload.mutate([...files]) }
 
   return (
-    <PageShell title="Documents" subtitle="Everything the assistant can use as proof. Add a PDF and it becomes searchable in about a minute.">
+    <PageShell
+      title="Documents"
+      subtitle={`${workspace ? `Everything the assistant can use as proof in ${workspace.name}.` : 'Everything the assistant can use as proof.'} Add a PDF and it becomes searchable in about a minute.`}
+    >
       <div
         onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
         onDragLeave={() => setDrag(false)}
@@ -84,7 +93,9 @@ export function LibraryPage() {
       >
         <UploadCloud className="mx-auto mb-2 h-7 w-7 text-muted" aria-hidden />
         <p className="font-medium">Drag PDF files here, or <button className="text-accent-ink underline-offset-2 hover:underline" onClick={() => input.current?.click()}>browse</button></p>
-        <p className="text-sm text-muted">Agreements, schedules of charges, amendments, circulars. Fictional demo files are already loaded.</p>
+        <p className="text-sm text-muted">
+          Agreements, schedules of charges, amendments, circulars.{workspace?.demo ? ' Fictional demo files are already loaded.' : ' Amendments are linked to the documents they change in this workspace.'}
+        </p>
         <input ref={input} type="file" accept="application/pdf" multiple hidden onChange={(e) => pick(e.target.files)} aria-label="Upload PDF files" />
         {upload.isPending && <p className="mt-2 text-sm text-muted">Uploading…</p>}
         {upload.isError && <p className="mt-2 text-sm text-clash" role="alert">{(upload.error as Error).message}</p>}
@@ -92,6 +103,7 @@ export function LibraryPage() {
       <div className="space-y-3">
         {isLoading && <><Skeleton className="h-20" /><Skeleton className="h-20" /></>}
         {docs.map((d) => <DocCard key={d.doc_id} doc={d} onView={setView} />)}
+        {!isLoading && docs.length === 0 && <p className="rounded-xl border border-line bg-surface px-4 py-6 text-center text-sm text-muted">No documents in this workspace yet.</p>}
       </div>
       <SourceDialog source={view} onClose={() => setView(null)} />
     </PageShell>

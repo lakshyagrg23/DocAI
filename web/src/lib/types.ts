@@ -1,8 +1,20 @@
 export type AnswerStatus = 'answered' | 'partial' | 'conflict' | 'abstained'
 export type ClauseStatus = 'in_force' | 'superseded' | 'future' | 'deleted'
 
+export interface Workspace {
+  workspace_id: string
+  name: string
+  created_at: string
+  documents: number
+  ready: number
+  chats: number
+  /** the seeded demo workspace: it has example questions and cannot be deleted */
+  demo: boolean
+}
+
 export interface Chat {
   chat_id: string
+  workspace_id: string | null
   title: string
   created_at: string
   as_of_date: string | null

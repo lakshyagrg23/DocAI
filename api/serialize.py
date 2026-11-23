@@ -6,7 +6,7 @@ import re
 import sqlite3
 from typing import Any
 
-from core import versions
+from core import db, versions
 from core.models import Message
 
 SMALL = {"of", "and", "to", "the", "in", "for", "on", "a", "an"}
@@ -96,13 +96,16 @@ def _walk_span_ids(ans: dict) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
-def enrich_answer(conn: sqlite3.Connection, ans: dict) -> dict:
-    """Add `sources` (span_id -> info with a stable citation number `n`) and `citations` (ids in citation order)."""
+def enrich_answer(conn: sqlite3.Connection, ans: dict, allowed_docs: list[str] | None = None) -> dict:
+    """Add `sources` (span_id -> info with a stable citation number `n`) and `citations` (ids in citation order).
+
+    With `allowed_docs` (the chat's workspace) a span id from any other document is skipped: blocked claims keep whatever ids
+    the model wrote, and the quote of a document in another workspace must never be returned through them."""
     sources: dict[str, Any] = {}
-    for n, sid in enumerate(_walk_span_ids(ans), 1):
+    for sid in _walk_span_ids(ans):
         info = source_info(conn, sid, ans["as_of_date"])
-        if info:
-            info["n"] = n
+        if info and (allowed_docs is None or info["doc_id"] in allowed_docs):
+            info["n"] = len(sources) + 1
             sources[sid] = info
     cards = []
     for d in ans.get("disagreements", []):  # every side gets a readable name and the page geometry for the UI
@@ -116,7 +119,9 @@ def enrich_answer(conn: sqlite3.Connection, ans: dict) -> dict:
 
 
 def message_out(conn: sqlite3.Connection, m: Message) -> dict[str, Any]:
-    answer = enrich_answer(conn, json.loads(m.answer_json)) if m.answer_json else None
+    chat = db.get_chat(conn, m.chat_id) if m.answer_json else None
+    allowed = db.workspace_doc_ids(conn, chat.workspace_id) if chat and chat.workspace_id else None
+    answer = enrich_answer(conn, json.loads(m.answer_json), allowed) if m.answer_json else None
     return {"msg_id": m.msg_id, "role": m.role, "content": m.content, "created_at": m.created_at, "answer": answer}
 
 

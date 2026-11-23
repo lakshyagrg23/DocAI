@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import access
-from api.routes import chats, documents, knowledge
+from api.routes import chats, documents, knowledge, workspaces
 from core import db
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +29,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                        allow_methods=["*"], allow_headers=["*"])
     app.include_router(access.router)  # /api/session and /api/login stay open
-    for r in (chats.router, documents.router, knowledge.router):
+    for r in (workspaces.router, chats.router, documents.router, knowledge.router):
         app.include_router(r, dependencies=[Depends(access.require_access)])
     if (DIST / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")

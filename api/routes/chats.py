@@ -35,28 +35,36 @@ class Ask(BaseModel):
     question: str
 
 
+class ChatNew(BaseModel):
+    workspace_id: str
+
+
 def chat_out(c: Any) -> dict:
     return c.model_dump()
 
 
 @router.get("/chats")
-def list_chats(conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
-    return [chat_out(c) for c in db.list_chats(conn)]
+def list_chats(workspace_id: str, conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
+    deps.require_workspace(conn, workspace_id)
+    return [chat_out(c) for c in db.list_chats(conn, workspace_id)]
 
 
 @router.post("/chats", status_code=201)
-def create_chat(conn: sqlite3.Connection = Depends(deps.conn_dep)) -> dict:
-    return chat_out(db.create_chat(conn, as_of_date=deps.today()))
+def create_chat(body: ChatNew, conn: sqlite3.Connection = Depends(deps.conn_dep)) -> dict:
+    deps.require_workspace(conn, body.workspace_id)
+    return chat_out(db.create_chat(conn, as_of_date=deps.today(), workspace_id=body.workspace_id))
 
 
 @router.patch("/chats/{chat_id}")
 def patch_chat(chat_id: str, body: ChatPatch, conn: sqlite3.Connection = Depends(deps.conn_dep)) -> dict:
-    if db.get_chat(conn, chat_id) is None:
+    chat = db.get_chat(conn, chat_id)
+    if chat is None:
         raise HTTPException(404, "chat not found")
     if body.title and body.title.strip():
         db.rename_chat(conn, chat_id, body.title.strip())
-    if body.doc_scope:
-        known = {r["doc_id"] for r in conn.execute("SELECT doc_id FROM documents")}
+    if body.doc_scope:  # the picker can only narrow a chat to documents of its own workspace
+        known = set(db.workspace_doc_ids(conn, chat.workspace_id)) if chat.workspace_id else \
+            {r["doc_id"] for r in conn.execute("SELECT doc_id FROM documents")}
         unknown = [d for d in body.doc_scope if d not in known]
         if unknown:
             raise HTTPException(422, f"unknown document: {unknown[0]}")

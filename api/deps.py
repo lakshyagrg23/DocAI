@@ -8,6 +8,8 @@ import time
 from collections.abc import Iterator
 from datetime import date
 
+from fastapi import HTTPException
+
 from core import config, db
 from core.llm.client import ModelClient, ModelUnavailable, get_client
 from core.retrieval.hybrid import Retriever
@@ -47,6 +49,11 @@ def conn_dep() -> Iterator[sqlite3.Connection]:
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def require_workspace(conn: sqlite3.Connection, workspace_id: str) -> None:
+    if db.get_workspace(conn, workspace_id) is None:
+        raise HTTPException(404, "workspace not found")
 
 
 # ---- model status without waking the GPU ----------------------------------------------------------------------

@@ -158,3 +158,5 @@ class VerifiedClaim(BaseModel):
 ```
 
 Status rules are in design/answering.md §Gate.
+
+> **Workspaces (ADR-024):** `documents` and `chats` also carry `workspace_id`, `sha256` is unique per workspace, and a new `workspaces(workspace_id, name, created_at)` table exists. See design/workspaces.md.

@@ -1,5 +1,5 @@
 import type {
-  AmendmentsResponse, AskResult, Chat, ConflictsResponse, Doc, Example, Health, Message, OutlineClause, Source, StageEvent,
+  AmendmentsResponse, AskResult, Chat, ConflictsResponse, Doc, Example, Health, Message, OutlineClause, Source, StageEvent, Workspace,
 } from './types'
 
 /** Fired when any request is answered with 401 (the access code is missing or expired), so the gate can ask again. */
@@ -38,23 +38,29 @@ export const api = {
   login: (code: string) => request<{ ok: boolean }>('/login', json('POST', { code })),
   health: () => request<Health>('/health'),
   examples: () => request<Example[]>('/examples'),
-  chats: () => request<Chat[]>('/chats'),
-  createChat: () => request<Chat>('/chats', json('POST')),
+  workspaces: () => request<Workspace[]>('/workspaces'),
+  createWorkspace: (name: string) => request<Workspace>('/workspaces', json('POST', { name })),
+  renameWorkspace: (id: string, name: string) => request<Workspace>(`/workspaces/${id}`, json('PATCH', { name })),
+  deleteWorkspace: (id: string) => request<void>(`/workspaces/${id}`, json('DELETE')),
+  chats: (workspaceId: string) => request<Chat[]>(`/chats?workspace_id=${encodeURIComponent(workspaceId)}`),
+  createChat: (workspaceId: string) => request<Chat>('/chats', json('POST', { workspace_id: workspaceId })),
   patchChat: (id: string, body: Partial<Pick<Chat, 'title' | 'as_of_date' | 'language'>> & { doc_scope?: string[] }) =>
     request<Chat>(`/chats/${id}`, json('PATCH', body)),
   exportUrl: (id: string) => `/api/chats/${id}/export`,
   deleteChat: (id: string) => request<void>(`/chats/${id}`, json('DELETE')),
   messages: (id: string) => request<Message[]>(`/chats/${id}/messages`),
-  documents: () => request<Doc[]>('/documents'),
+  documents: (workspaceId: string) => request<Doc[]>(`/documents?workspace_id=${encodeURIComponent(workspaceId)}`),
   outline: (id: string, asOf?: string) => request<OutlineClause[]>(`/documents/${id}/outline${asOf ? `?as_of=${asOf}` : ''}`),
-  upload: (files: File[]) => {
+  upload: (workspaceId: string, files: File[]) => {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))
-    return request<Doc[]>('/documents', { method: 'POST', body: form })
+    return request<Doc[]>(`/documents?workspace_id=${encodeURIComponent(workspaceId)}`, { method: 'POST', body: form })
   },
   span: (id: string, asOf?: string) => request<Source>(`/spans/${encodeURIComponent(id)}${asOf ? `?as_of=${asOf}` : ''}`),
-  conflicts: (asOf?: string) => request<ConflictsResponse>(`/conflicts${asOf ? `?as_of=${asOf}` : ''}`),
-  amendments: (asOf?: string) => request<AmendmentsResponse>(`/amendments${asOf ? `?as_of=${asOf}` : ''}`),
+  conflicts: (workspaceId: string, asOf?: string) =>
+    request<ConflictsResponse>(`/conflicts?workspace_id=${encodeURIComponent(workspaceId)}${asOf ? `&as_of=${asOf}` : ''}`),
+  amendments: (workspaceId: string, asOf?: string) =>
+    request<AmendmentsResponse>(`/amendments?workspace_id=${encodeURIComponent(workspaceId)}${asOf ? `&as_of=${asOf}` : ''}`),
   pageImageUrl: (docId: string, page: number, dpi = 130) => `/api/documents/${docId}/pages/${page}/image?dpi=${dpi}`,
 }
 

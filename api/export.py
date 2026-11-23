@@ -71,19 +71,21 @@ def answer_md(ans: dict) -> list[str]:
     if src:
         out.append("**Sources**")
         out.append("")
-        for sid, s in src.items():
+        for s in src.values():
             out += [f"[{s['n']}] {_place(s)}", "", _quote(s["text"]), ""]
     return out
 
 
 def chat_markdown(conn: sqlite3.Connection, chat: Chat, messages: list[Message]) -> str:
     lines = [f"# {chat.title}", ""]
-    meta = [f"Rules as of {chat.as_of_date or 'today'}"]
+    ws = db.get_workspace(conn, chat.workspace_id) if chat.workspace_id else None
+    allowed = db.workspace_doc_ids(conn, ws.workspace_id) if ws else None
+    meta = ([f"Workspace: {ws.name}"] if ws else []) + [f"Rules as of {chat.as_of_date or 'today'}"]
     if chat.doc_scope:
         names = [serialize.doc_name_for(conn, d) or d for d in chat.doc_scope]
         meta.append("Documents: " + ", ".join(names))
     else:
-        meta.append("Documents: all uploaded documents")
+        meta.append("Documents: all documents in the workspace" if ws else "Documents: all uploaded documents")
     lines += [" · ".join(meta), ""]
     n = 0
     for m in messages:
@@ -91,7 +93,7 @@ def chat_markdown(conn: sqlite3.Connection, chat: Chat, messages: list[Message])
             n += 1
             lines += ["---", "", f"## Question {n}", "", m.content, ""]
         elif m.answer_json:
-            lines += answer_md(serialize.enrich_answer(conn, json.loads(m.answer_json)))
+            lines += answer_md(serialize.enrich_answer(conn, json.loads(m.answer_json), allowed))
         else:
             lines += [m.content, ""]
     lines += ["---", "", "*Every statement above was checked against the cited quotation before it was shown.*", ""]

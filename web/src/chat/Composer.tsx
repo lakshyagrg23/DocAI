@@ -6,6 +6,7 @@ import { fmtDate } from '@/lib/plain'
 import { ScopeMenu } from './ScopeMenu'
 
 interface Props {
+  workspaceId: string
   onSend: (question: string) => void
   busy: boolean
   asOf: string
@@ -17,7 +18,7 @@ interface Props {
   onScope: (scope: string[] | null) => void
 }
 
-export function Composer({ onSend, busy, asOf, onAsOf, today, offline, autoFocus, scope, onScope }: Props) {
+export function Composer({ workspaceId, onSend, busy, asOf, onAsOf, today, offline, autoFocus, scope, onScope }: Props) {
   const [text, setText] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
@@ -58,7 +59,7 @@ export function Composer({ onSend, busy, asOf, onAsOf, today, offline, autoFocus
             </label>
           </Tooltip>
           <div className="flex-1" />
-          <ScopeMenu scope={scope} onChange={onScope} />
+          <ScopeMenu workspaceId={workspaceId} scope={scope} onChange={onScope} />
           <button
             type="button"
             onClick={send}

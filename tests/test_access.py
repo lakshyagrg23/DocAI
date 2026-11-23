@@ -3,7 +3,9 @@ import pytest
 from test_api import client, env  # noqa: F401  (fixtures: an API client over an ingested temp corpus)
 
 from api import access
+from core import config
 
+WS = {"workspace_id": config.DEFAULT_WORKSPACE_ID}
 CODE = "open-sesame"
 
 
@@ -22,14 +24,14 @@ def gated(monkeypatch):
 def test_open_when_no_code_is_configured(client, monkeypatch):  # noqa: F811
     monkeypatch.delenv("ACCESS_CODE", raising=False)
     assert client.get("/api/session").json() == {"required": False, "ok": True}
-    assert client.get("/api/documents").status_code == 200
+    assert client.get("/api/documents", params=WS).status_code == 200
 
 
 def test_every_api_route_is_closed_without_the_code(client, gated):  # noqa: F811
     assert client.get("/api/session").json() == {"required": True, "ok": False}
     for path in ("/api/health", "/api/documents", "/api/chats", "/api/conflicts", "/api/amendments", "/api/examples"):
         assert client.get(path).status_code == 401, path
-    assert client.post("/api/chats").status_code == 401
+    assert client.post("/api/chats", json={"workspace_id": "x"}).status_code == 401
     assert client.post("/api/chats/x/ask", json={"question": "hi"}).status_code == 401
     assert client.get("/api/documents/D6/pages/1/image").status_code == 401  # images too
     assert client.get("/").status_code in (200, 404)  # the page itself (login screen) is public when built
@@ -37,18 +39,18 @@ def test_every_api_route_is_closed_without_the_code(client, gated):  # noqa: F81
 
 def test_wrong_code_then_right_code(client, gated):  # noqa: F811
     assert client.post("/api/login", json={"code": "nope"}).status_code == 401
-    assert client.get("/api/documents").status_code == 401
+    assert client.get("/api/documents", params=WS).status_code == 401
     r = client.post("/api/login", json={"code": f"  {CODE} "})
     assert r.status_code == 200 and "httponly" in r.headers["set-cookie"].lower()
     assert client.get("/api/session").json() == {"required": True, "ok": True}
-    assert client.get("/api/documents").status_code == 200
+    assert client.get("/api/documents", params=WS).status_code == 200
 
 
 def test_a_changed_code_signs_everyone_out(client, gated, monkeypatch):  # noqa: F811
     client.post("/api/login", json={"code": CODE})
-    assert client.get("/api/documents").status_code == 200
+    assert client.get("/api/documents", params=WS).status_code == 200
     monkeypatch.setenv("ACCESS_CODE", "a-new-code")
-    assert client.get("/api/documents").status_code == 401
+    assert client.get("/api/documents", params=WS).status_code == 401
 
 
 def test_guessing_is_slowed_down(client, gated):  # noqa: F811
@@ -60,7 +62,7 @@ def test_guessing_is_slowed_down(client, gated):  # noqa: F811
 
 def test_question_limits_per_visitor_and_per_day(client, gated, monkeypatch):  # noqa: F811
     client.post("/api/login", json={"code": CODE})
-    chat = client.post("/api/chats").json()["chat_id"]
+    chat = client.post("/api/chats", json={"workspace_id": WS["workspace_id"]}).json()["chat_id"]
     monkeypatch.setattr(access, "ASK_PER_HOUR", 2)
     url = f"/api/chats/{chat}/ask"
     assert client.post(url, json={"question": "What fees apply if I pay an EMI late?"}).status_code == 200
@@ -78,10 +80,10 @@ def test_upload_limits(client, gated, monkeypatch):  # noqa: F811
     client.post("/api/login", json={"code": CODE})
     monkeypatch.setattr(access, "UPLOAD_PER_HOUR", 1)
     files = [("files", ("a.pdf", b"%PDF-1.4 tiny", "application/pdf")), ("files", ("b.pdf", b"%PDF-1.4 tiny", "application/pdf"))]
-    assert client.post("/api/documents", files=files).status_code == 429  # two files cost two of one
+    assert client.post("/api/documents", params=WS, files=files).status_code == 429  # two files cost two of one
     monkeypatch.setattr(access, "UPLOAD_PER_HOUR", 10)
     monkeypatch.setattr(access, "UPLOAD_MAX_BYTES", 10)
-    r = client.post("/api/documents", files=[("files", ("big.pdf", b"%PDF-" + b"0" * 50, "application/pdf"))])
+    r = client.post("/api/documents", params=WS, files=[("files", ("big.pdf", b"%PDF-" + b"0" * 50, "application/pdf"))])
     assert r.status_code == 413
 
 

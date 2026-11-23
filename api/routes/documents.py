@@ -40,13 +40,15 @@ def _doc_out(conn: sqlite3.Connection, d: sqlite3.Row) -> dict:
 
 
 @router.get("/documents")
-def list_documents(conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
-    return [_doc_out(conn, d) for d in conn.execute("SELECT * FROM documents ORDER BY doc_id")]
+def list_documents(workspace_id: str, conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
+    deps.require_workspace(conn, workspace_id)
+    return [_doc_out(conn, d) for d in conn.execute("SELECT * FROM documents WHERE workspace_id=? ORDER BY doc_id", (workspace_id,))]
 
 
 @router.post("/documents", status_code=202)
-async def upload(request: Request, files: list[UploadFile],
+async def upload(request: Request, workspace_id: str, files: list[UploadFile],
                  conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
+    deps.require_workspace(conn, workspace_id)
     access.limit_upload(request, len(files))
     dest_dir = config.DATA_DIR / "uploads"
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -64,7 +66,7 @@ async def upload(request: Request, files: list[UploadFile],
         sub.mkdir(parents=True, exist_ok=True)
         dest = sub / name
         dest.write_bytes(data)
-        job = pipeline.enqueue(dest, conn, stable_ids=False)
+        job = pipeline.enqueue(dest, conn, stable_ids=False, workspace_id=workspace_id)
         doc_id = conn.execute("SELECT doc_id FROM ingest_jobs WHERE job_id=?", (job,)).fetchone()["doc_id"]
         out.append(_doc_out(conn, conn.execute("SELECT * FROM documents WHERE doc_id=?", (doc_id,)).fetchone()))
     return out

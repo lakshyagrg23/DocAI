@@ -17,7 +17,7 @@ describe('ScopeMenu', () => {
   })
   const setup = (scope: string[] | null) => {
     const onChange = vi.fn()
-    render(<QueryClientProvider client={new QueryClient()}><ScopeMenu scope={scope} onChange={onChange} /></QueryClientProvider>)
+    render(<QueryClientProvider client={new QueryClient()}><ScopeMenu workspaceId="ws1" scope={scope} onChange={onChange} /></QueryClientProvider>)
     return onChange
   }
 

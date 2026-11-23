@@ -6,14 +6,16 @@ import { PageShell } from '@/layout/PageShell'
 import { api } from '@/lib/api'
 import { fmtDate, localToday, unquote } from '@/lib/plain'
 import type { Source } from '@/lib/types'
+import { useWorkspaceId } from '@/state/workspace'
 import { Card, Kicker, Skeleton } from '@/ui/primitives'
 import { SourceDialog, type ViewSource } from '@/ui/SourceDialog'
 import { DateField } from './Conflicts'
 
 export function AmendmentsPage() {
+  const wid = useWorkspaceId()
   const [asOf, setAsOf] = useState(localToday)
   const [view, setView] = useState<ViewSource | null>(null)
-  const { data, isLoading } = useQuery({ queryKey: ['amendments', asOf], queryFn: () => api.amendments(asOf) })
+  const { data, isLoading } = useQuery({ queryKey: ['amendments', wid, asOf], queryFn: () => api.amendments(wid, asOf) })
   const toView = (s: Source): ViewSource => ({ doc_id: s.doc_id, doc_name: s.doc_name, clause_label: s.clause_label, page: s.page, pages: s.pages,
     bboxes: s.bboxes, page_width: s.page_width, page_height: s.page_height, ocr: s.ocr })
 
@@ -57,7 +59,7 @@ export function AmendmentsPage() {
           <Kicker>Amendments pointing at missing documents</Kicker>
           {data.unresolved.map((u) => (
             <div key={`${u.doc_id}-${u.target}`} className="flex items-start gap-3 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> A document you uploaded changes “{u.target}”, which is not in your library yet.
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> A document you uploaded changes “{u.target}”, which is not in this workspace yet.
             </div>
           ))}
         </div>
