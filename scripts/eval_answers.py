@@ -13,6 +13,7 @@ from core.llm.client import ModelClient
 from core.models import AnswerJSON, VerifiedClaim
 from core.normalize import RE_NIL_CLAIM, normalize_text, number_tokens, source_values
 from core.retrieval.hybrid import Retriever
+from scripts import quote_check
 
 NO_EVIDENCE_PREFIX = "No verified evidence for:"
 
@@ -109,7 +110,8 @@ def run(items: list[dict], client: ModelClient) -> dict:
             ids = [s for c in d["claims"] for s in c["span_ids"]]
             checks["ocr_badge"] = any(conn.execute("SELECT ocr_conf FROM spans WHERE span_id=?", (s,)).fetchone()[0]
                                       is not None for s in ids)
-        rows.append({"id": it["id"], "type": it["type"], "question": it["question"], "expect": it["expect"],
+        q_checked, q_bad = quote_check.mismatches(conn, d)
+        rows.append({"quote_checked": q_checked, "quote_mismatch": q_bad, "id": it["id"], "type": it["type"], "question": it["question"], "expect": it["expect"],
                      "answer": d, "checks": checks, "pass": all(checks.values()), "unsupported_displayed": recheck_displayed(conn, d),
                      "secs": round(time.perf_counter() - t0, 1)})
     return summarise(rows)
@@ -123,6 +125,8 @@ def summarise(rows: list[dict]) -> dict:
     secs = sorted(r["secs"] for r in rows)
     return {"items": rows, "n": len(rows), "passed": sum(r["pass"] for r in rows),
             "unsupported_displayed": sum(len(r["unsupported_displayed"]) for r in rows),
+            "quote_exactness": f"{sum(r.get('quote_checked', 0) - len(r.get('quote_mismatch', [])) for r in rows)}/"
+                               f"{sum(r.get('quote_checked', 0) for r in rows)}",
             "abstain_recall": f"{sum(r['answer']['status'] == 'abstained' for r in unans)}/{len(unans)}",
             "false_abstain": f"{sum(r['answer']['status'] == 'abstained' for r in answerable)}/{len(answerable)}",
             "faithfulness_avg": round(sum(faith) / len(faith), 1) if faith else None,
@@ -144,7 +148,7 @@ def report(res: dict, verbose: bool = False) -> None:
             if a["missing_evidence"]:
                 print(f"       missing={a['missing_evidence']}")
     print(f"\nitems {res['passed']}/{res['n']}   unsupported displayed: {res['unsupported_displayed']} (gate 0)   "
-          f"abstention recall {res['abstain_recall']}   false abstain {res['false_abstain']}   "
+          f"quote exactness {res.get('quote_exactness')} (gate 100%)   abstention recall {res['abstain_recall']}   false abstain {res['false_abstain']}   "
           f"faithfulness avg {res['faithfulness_avg']}   p50 {res['p50_s']}s p95 {res['p95_s']}s")
 
 

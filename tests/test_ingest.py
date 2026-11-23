@@ -409,3 +409,11 @@ def test_failed_job_marks_document_failed(tmp_path):
     doc = db.list_documents(conn)[0]
     assert doc.status == "Failed" and doc.status_detail
     assert conn.execute("SELECT state FROM ingest_jobs WHERE job_id=?", (job,)).fetchone()[0] == "failed"
+
+
+def test_section_keyword_numbering_with_text_on_the_same_line():
+    """'Section 1.01 An applicant ...' (held-out format) starts a numbered clause; a cross-reference does not."""
+    from core.ingest.segment import KEYWORD
+    assert KEYWORD.match("Section 1.01 An applicant must be an adult.").group("kw") == "1.01"
+    assert KEYWORD.match("Clause 7: Prepayment").group("kw") == "7"
+    assert KEYWORD.match("Section 2.01 of the Terms is revised to") is None  # lowercase continuation = a reference

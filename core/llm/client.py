@@ -24,6 +24,7 @@ class ModelClient:
             base_url=self.base_url,
             headers={"Authorization": f"Bearer {api_key or config.MODEL_API_KEY}"},
             transport=transport,
+            follow_redirects=True,  # Modal answers a cold start / long call with a 303 that must be followed
         )
         self._backoff_s = backoff_s
 

@@ -15,7 +15,7 @@ from core.models import Clause, Span
 NUM = re.compile(r"^(?P<num>\d{1,2}(?:\.\d{1,2}){0,3})(?P<sep>[.)]?)\s+(?P<rest>\S.*)$")
 ALPHA = re.compile(r"^\((?P<a>[a-z])\)\s+\S")
 ROMAN = re.compile(r"^\((?P<r>i{1,3}|iv|v|vi{0,3}|ix|x)\)\s+\S")
-KEYWORD = re.compile(r"^(?:Clause|Article|Para(?:graph)?|Section)\s+(?P<kw>\d+(?:\.\d+)*)\s*(?:[:)–—-]|\.(?=\s|$)|$)")
+KEYWORD = re.compile(r"^(?:Clause|Article|Para(?:graph)?|Section)\s+(?P<kw>\d+(?:\.\d+)*)\s*(?:[:)–—-]|\.(?=\s|$)|$|(?=\s[A-Z\"“]))")
 SCHED = re.compile(r"^(?:Schedule|Annexure|Appendix)\s+[IVX\d]+\b", re.IGNORECASE)
 FAQ_Q = re.compile(r"^(?:Q\s?\d*[:.)]\s|Q\.\s|\d+\.\s*(?:What|Who|How|Can|Is|Are|When|Where|Why)\b)")
 MONTHS = {"january", "february", "march", "april", "may", "june", "july", "august", "september", "october",

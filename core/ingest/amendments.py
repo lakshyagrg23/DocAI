@@ -98,6 +98,7 @@ def run(conn: sqlite3.Connection, doc_id: str, client: ModelClient) -> None:
         except (ModelUnavailable, ValueError) as e:
             log.warning("amendment extraction failed for %s: %s", doc_id, e)
             out = AmendExtraction()
+        seen: set[tuple] = set()
         for n, d in enumerate(out.amendments, 1):
             d.evidence_span_ids = [s.strip().strip("[]").strip() for s in d.evidence_span_ids]
             d.new_text_span_ids = [s.strip().strip("[]").strip() for s in d.new_text_span_ids]
@@ -107,6 +108,10 @@ def run(conn: sqlite3.Connection, doc_id: str, client: ModelClient) -> None:
             if reason:
                 log.info("amendment dropped (%s): %s", reason, d.model_dump())
                 continue
+            key = (d.action, (d.target_path or "").strip(), d.target_ref.strip().lower(), tuple(d.evidence_span_ids))
+            if key in seen:  # small models sometimes repeat a directive; a duplicate would create an empty version
+                continue
+            seen.add(key)
             source = clause_of[next(s for s in d.evidence_span_ids if s in text_of)]
             eff = _parse_date(d.effective_date) or (doc.effective_date if doc else None)
             conn.execute(

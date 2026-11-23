@@ -81,6 +81,8 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
     calculation, calc_missing, used = calc.run(plan.calc, question, claims) if plan.calc.kind != "none" else (None, [], set())
     if calculation and calculation["result"] is not None:
         missing = []  # every required input was found, so the draft's own "missing" notes no longer apply
+    if missing and not any(c.verdict != "unsupported" for c in claims):
+        calc_missing = []  # nothing verified and the draft already says what is missing: don't add calculator noise
     result = gate(claims, missing + calc_missing, plan.sub_questions if drafted_ok and pack.spans else [])
     if calculation and calculation["result"] is not None:
         if result.status == "abstained":

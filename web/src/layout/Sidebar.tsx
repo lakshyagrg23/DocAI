@@ -21,8 +21,8 @@ const NAV = [
 function ModelStatus({ compact }: { compact?: boolean }) {
   const { data, isLoading } = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15_000 })
   const state = isLoading ? 'checking' : (data?.state ?? 'offline')
-  const dot = state === 'ready' ? 'bg-ok' : state === 'offline' ? 'bg-clash' : 'bg-warn'
-  const text = state === 'ready' ? 'Model ready' : state === 'warming' ? 'Model warming up' : state === 'checking' ? 'Checking model…' : 'Model offline'
+  const dot = state === 'ready' ? 'bg-ok' : state === 'offline' ? 'bg-clash' : state === 'asleep' ? 'bg-calm' : 'bg-warn'
+  const text = state === 'ready' ? 'Model ready' : state === 'warming' ? 'Model warming up' : state === 'asleep' ? 'Model asleep: your first question wakes it' : state === 'checking' ? 'Checking model…' : 'Model offline'
   return (
     <Tooltip content={text} side="right">
       <div className="flex items-center gap-2 text-xs text-muted" role="status" aria-label={text}>

@@ -92,3 +92,31 @@ def test_unreachable_service_raises_model_unavailable():
         c.health()
     with pytest.raises(ModelUnavailable):
         c.embed(["a"])
+
+
+def test_nli_accepts_gpu_tensor_like_scores():
+    """HHEM returns a torch tensor; on CUDA it must be moved to the CPU before NumPy sees it (found on Modal)."""
+    import numpy as np
+
+    from model_service.aux_models import AuxModels
+
+    class FakeTensor:
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return np.array([0.9, 0.1], dtype=np.float32)
+
+        def __array__(self, *a, **k):
+            raise TypeError("can't convert cuda:0 device type tensor to numpy")
+
+    class FakeNli:
+        def predict(self, pairs):
+            return FakeTensor()
+
+    m = AuxModels(device="cpu")
+    m._nli = FakeNli()
+    assert [round(x, 1) for x in m.nli([("a", "b"), ("c", "d")])] == [0.9, 0.1]

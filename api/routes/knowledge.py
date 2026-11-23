@@ -16,6 +16,9 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 def health() -> dict:
+    if deps.passive_health():  # never contact the model service: that could start the paid GPU
+        state = deps.MODEL_STATUS.state()
+        return {"state": state, "label": deps.PASSIVE_LABELS[state]}
     try:
         h = deps.get_model().health()
     except ModelUnavailable:

@@ -2,22 +2,28 @@ import type {
   AmendmentsResponse, AskResult, Chat, ConflictsResponse, Doc, Example, Health, Message, OutlineClause, Source, StageEvent,
 } from './types'
 
+/** Fired when any request is answered with 401 (the access code is missing or expired), so the gate can ask again. */
+export const AUTH_EVENT = 'docai-auth'
+
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
     super(message)
   }
 }
 
+async function failure(res: Response, path: string): Promise<ApiError> {
+  let detail = res.statusText
+  try {
+    const body = await res.json()
+    detail = typeof body.detail === 'string' ? body.detail : detail
+  } catch { /* not JSON */ }
+  if (res.status === 401 && path !== '/login' && path !== '/session') window.dispatchEvent(new Event(AUTH_EVENT))
+  return new ApiError(detail, res.status)
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init)
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      detail = typeof body.detail === 'string' ? body.detail : detail
-    } catch { /* not JSON */ }
-    throw new ApiError(detail, res.status)
-  }
+  if (!res.ok) throw await failure(res, path)
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }
 
@@ -28,6 +34,8 @@ const json = (method: string, body?: unknown): RequestInit => ({
 })
 
 export const api = {
+  session: () => request<{ required: boolean; ok: boolean }>('/session'),
+  login: (code: string) => request<{ ok: boolean }>('/login', json('POST', { code })),
   health: () => request<Health>('/health'),
   examples: () => request<Example[]>('/examples'),
   chats: () => request<Chat[]>('/chats'),
@@ -66,7 +74,8 @@ export function parseSse(chunk: string): { event: string; data: unknown }[] {
 /** Ask a question. Resolves with the stored user + assistant messages; `onStage` reports live progress. */
 export async function ask(chatId: string, question: string, onStage: (s: StageEvent) => void, signal?: AbortSignal): Promise<AskResult> {
   const res = await fetch(`/api/chats/${chatId}/ask`, { ...json('POST', { question }), signal })
-  if (!res.ok || !res.body) throw new ApiError((await res.text()) || res.statusText, res.status)
+  if (!res.ok) throw await failure(res, `/chats/${chatId}/ask`)
+  if (!res.body) throw new ApiError('The answer did not arrive. Please try again.', 500)
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''

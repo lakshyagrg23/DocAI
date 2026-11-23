@@ -1,0 +1,35 @@
+# Held-out generalisation set (ADR-013): documents in corpus/heldout (python corpus/heldout.py), different formats from the demo corpus.
+# Run:  DATA_DIR=./data_heldout python scripts/ingest_corpus.py --reset --pdf-dir corpus/heldout
+#       DATA_DIR=./data_heldout python scripts/eval.py --qa tests/heldout.yaml
+# Same fields as tests/qa.yaml. NOTE: the set was used once to diagnose generalisation gaps (see progress.md), so it is no longer unseen.
+
+defaults:
+  as_of: "2026-11-22"
+
+items:
+  - {id: h01, type: single, question: "What is the minimum opening deposit for a savings account?",
+     expect: {status: answered, must_cite: ["H1:1.02"], values: ["₹1,000"]}}
+  - {id: h02, type: single, question: "What interest rate is paid on savings balances?",
+     expect: {status: answered, must_cite: ["H1:2.03"], values: ["3.5%"]}}
+  - {id: h03, type: table, question: "What is the charge for a duplicate statement?",
+     expect: {status: answered, must_cite: ["H3:table1.row3"], values: ["₹50"]}}
+  - {id: h04, type: table, question: "How much does a cheque book cost?",
+     expect: {status: answered, must_cite: ["H3:table1.row4"], values: ["₹100"]}}
+  - {id: h05, type: current_rule, question: "What is the monthly maintenance fee on a savings account?",
+     expect: {status: answered, must_cite: ["H2:p1.2"], values: ["₹100"], forbid_values_in_body: ["₹150"], chain: ["H1:2.01", "H2:p1.2"]}}
+  - {id: h06, type: as_of, as_of: "2026-01-15", question: "What is the monthly maintenance fee on a savings account?",
+     expect: {status: answered, must_cite: ["H1:2.01"], values: ["₹150"], forbid_values_in_body: ["₹100"]}}
+  - {id: h07, type: conflict, question: "What is the daily ATM cash withdrawal limit?",
+     expect: {status: conflict, must_cite: ["H1:3.01", "H3:table1.row1"], conflict_subjects: ["cash_withdrawal_limit"]}}
+  - {id: h08, type: multi, question: "What do I pay if I close my account within 90 days, and what is the minimum opening deposit?",
+     expect: {status: answered, must_cite: ["H1:3.02", "H1:1.02"], values: ["₹200", "₹1,000"]}}
+  - {id: h09, type: multi, question: "What average balance must I keep, and what is the shortfall fee?",
+     expect: {status: answered, must_cite: ["H1:2.02"], values: ["₹10,000", "₹75"]}}
+  - {id: h10, type: conflict_negative, question: "What is the minimum age to open an account?",
+     expect: {status: answered, must_cite: ["H1:1.01"], values: ["18"], conflict_subjects: []}}
+  - {id: h11, type: unanswerable, question: "What is the overdraft limit on a savings account?",
+     expect: {status: abstained}}
+  - {id: h12, type: unanswerable, question: "What is the home loan interest rate?",
+     expect: {status: abstained}}
+  - {id: h13, type: unanswerable, question: "What is the fee for an international wire transfer?",
+     expect: {status: abstained}}

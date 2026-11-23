@@ -60,4 +60,6 @@ class AuxModels:
 
     def nli(self, pairs: list[tuple[str, str]]) -> list[float]:
         scores = self._get_nli().predict(pairs)
+        if hasattr(scores, "detach"):  # a torch tensor, possibly on the GPU
+            scores = scores.detach().cpu().numpy()
         return [float(s) for s in np.atleast_1d(np.asarray(scores))]

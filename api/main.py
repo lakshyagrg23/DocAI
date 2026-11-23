@@ -5,11 +5,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from api import access
 from api.routes import chats, documents, knowledge
 from core import db
 
@@ -27,8 +28,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Verifiable DocAI API", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                        allow_methods=["*"], allow_headers=["*"])
+    app.include_router(access.router)  # /api/session and /api/login stay open
     for r in (chats.router, documents.router, knowledge.router):
-        app.include_router(r)
+        app.include_router(r, dependencies=[Depends(access.require_access)])
     if (DIST / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 

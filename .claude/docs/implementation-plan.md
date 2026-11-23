@@ -89,15 +89,18 @@ quote highlighted on the real PDF page, Sources tab, "How we checked" tab), Amen
 179 backend tests + 19 front-end tests pass; ruff and `tsc` clean. Not checked in the browser: mobile widths (drawers are implemented but only reasoned about),
 file upload through the Documents page, Hindi, and the remaining demo-script steps (covered by eval and API tests). The Streamlit UI (`app/`) was removed on 2026-11-23 after the user approved the React UI (ADR-018).
 
-### M8 — Deploy (P0 complete; now done after M9, ADR-018)
+### M8 — Deploy (P0 complete; done after M9, ADR-018, ADR-020)
 Read: architecture.md §Deployment, design/model-service.md §Modal
-- [ ] Deploy the model service to Modal (runbook.md §3); smoke test against its URL
-- [ ] Upload the locally ingested `data/` to the Modal Volume (or re-ingest against the Modal service)
-- [ ] `deploy/modal_app_ui.py` (FastAPI + built `web/dist` via web_server, Tesseract + `hin` in the image, Volume at /data) deployed; model service deployed
-- [ ] README: what it does, pipeline diagram (Mermaid), models and why, how verification and abstention work, how to run, limitations
-- [ ] Held-out generalisation check: 2-3 differently formatted PDFs (other numbering styles, unnumbered circular, merged-cell fee table, own conflict + amendment) with a small Q&A file, never used during development; run at M5, M6 and here (ADR-013)
-- [ ] Full eval against the deployed model service; all P0 gates pass
+- [x] Deploy the model service to Modal (T4, `qwen3.5:4b`); smoke test against its URL passes
+- [x] Seed the data: `docai-data:/seed` (DB, index, demo PDFs); the app copies it to local disk and syncs changes to `/state` (ADR-020)
+- [x] `deploy/modal_app_ui.py` (FastAPI + built `web/dist`, Tesseract + `hin`, Volume) deployed; model service deployed
+- [x] README: what it does, pipeline diagram (Mermaid), models and why, how verification and abstention work, how to run, limitations
+- [x] Held-out generalisation check (`corpus/heldout.py`, `tests/heldout.yaml`): 13/13 after three generic fixes; no longer unseen (see progress.md)
+- [x] Full eval against the deployed model service: 38/39, all P0 gates met (see progress.md)
+- [x] Refresh the Modal seed, redeploy the app, check the public app (done in the final GPU session; API-level check, not a browser click-through)
+- [x] Access gate + spend limits on the public app (ADR-021)
 **Done when:** the public URL works from a fresh browser; P0 gates in eval.md pass; README done.
+**Status: DONE 2026-11-23. The GPU app is stopped to save credit (bring it back: `modal deploy model_service/modal_app.py`). Not yet done: a click-through of the public URL in a real browser.**
 
 ### M9 — P1: OCR, calculator, as-of UI, polish (runs BEFORE M8 by user request, ADR-018)
 Read: design/ingest.md §OCR, design/answering.md §5

@@ -66,12 +66,14 @@ def build_pdf(path: Path, pages: list[texts.Page], footer_name: str) -> None:
                 flow.append(Paragraph(block[1], body))
             elif kind == "table":
                 rows, widths = block[1], block[2]
+                spans = block[3] if len(block) > 3 else []  # optional merged cells: ((col0,row0),(col1,row1))
                 data = [[Paragraph(c, cellb if r == 0 else cell) for c in row] for r, row in enumerate(rows)]
                 t = Table(data, colWidths=[w * cm for w in widths], repeatRows=1)
                 t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.6, "#444444"),
                                        ("BACKGROUND", (0, 0), (-1, 0), "#E8E8E8"),
                                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                                       ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+                                       ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                                       *[("SPAN", a, b) for a, b in spans]]))
                 flow += [Spacer(1, 6), t, Spacer(1, 8)]
     doc = SimpleDocTemplate(str(path), pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm,
                             topMargin=2 * cm, bottomMargin=2 * cm, title=path.stem, author=footer_name)

@@ -37,6 +37,7 @@ def select(items: list[dict], only: str | None, type_: str | None, skip_types: s
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")  # questions contain the rupee sign; Windows consoles default to cp1252
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--qa", default=str(QA_PATH), help="question file (tests/heldout.yaml for the held-out set; use DATA_DIR=./data_heldout)")
     ap.add_argument("--only")
     ap.add_argument("--type")
     ap.add_argument("--skip-types")
@@ -46,7 +47,7 @@ def main() -> int:
     ap.add_argument("--hhem-sweep")
     args = ap.parse_args()
 
-    _, items = load_qa()
+    _, items = load_qa(Path(args.qa))
     items = select(items, args.only, args.type, args.skip_types)
     if args.retrieval_only:
         import eval_retrieval  # sibling module in scripts/

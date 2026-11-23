@@ -1,6 +1,7 @@
-"""Production model service on Modal T4 (design/model-service.md). Deployed only in M8.
+"""Production model service on Modal T4 (design/model-service.md). Deployed in M8.
 
-Verify Modal API names (scaledown_window, min_containers, asgi_app, add_local_python_source) against current docs.
+API names checked against modal 1.6.4 (scaledown_window, min_containers, startup_timeout, asgi_app, add_local_python_source).
+The default LLM is qwen3.5:4b, the model everything was tuned on (ADR-012, ADR-020); override with LLM_MODEL at deploy time.
 """
 from __future__ import annotations
 
@@ -11,13 +12,14 @@ import time
 import modal
 
 KEEP_WARM = os.environ.get("KEEP_WARM") == "1"
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:7b-instruct")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.5:4b")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("curl", "zstd")
     .run_commands("curl -fsSL https://ollama.com/install.sh | sh")
-    .pip_install("fastapi", "uvicorn", "httpx", "python-dotenv", "numpy", "FlagEmbedding", "transformers", "torch")
+    .pip_install("fastapi", "uvicorn", "httpx", "python-dotenv", "numpy", "pydantic>=2", "FlagEmbedding",
+                 "transformers>=4.44,<5", "datasets<4", "torch")
     .env({"OLLAMA_NUM_PARALLEL": "4", "OLLAMA_KEEP_ALIVE": "24h", "AUX_DEVICE": "cuda", "LLM_MODEL": LLM_MODEL})
     .add_local_python_source("model_service", "core")
 )
@@ -32,6 +34,7 @@ hf_vol = modal.Volume.from_name("hf-cache", create_if_missing=True)
     secrets=[modal.Secret.from_name("docai-token")],
     scaledown_window=900,
     timeout=3600,
+    startup_timeout=1800,  # first start pulls the LLM and three HF models
     min_containers=1 if KEEP_WARM else 0,
 )
 class ModelService:

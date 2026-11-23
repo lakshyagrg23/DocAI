@@ -14,7 +14,7 @@ from core.llm.client import ModelClient, ModelUnavailable
 from core.llm.prompt_loader import load_prompt
 from core.models import Document, RegisterMeta
 
-DEMO_NAME = re.compile(r"^(D\d+)_", re.IGNORECASE)
+DEMO_NAME = re.compile(r"^([DH]\d+)_", re.IGNORECASE)  # D1_..: demo corpus, H1_..: held-out set (stable ids)
 REF_RE = re.compile(r"(?:Reference\s+No\.?|Circular\s+No\.?|Ref\.?\s*No\.?)\s*[:.]?\s*([A-Z0-9][A-Z0-9/\-_.]*[A-Z0-9])")
 DATED_RE = re.compile(r"Dated:?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})")
 EFFECTIVE_RE = re.compile(r"Effective:?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})")

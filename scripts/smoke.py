@@ -24,10 +24,25 @@ def step(name: str, fn):
     return out
 
 
+def wait_for_service(c, seconds: int = 900) -> None:
+    """A cold GPU container (Modal) needs minutes to start: poll /health until it answers."""
+    deadline = time.time() + seconds
+    while True:
+        try:
+            c.health()
+            return
+        except ModelUnavailable as e:
+            if time.time() > deadline:
+                raise
+            print(f"   waiting for the service to start ({e})")
+            time.sleep(10)
+
+
 def main() -> int:
     c = get_client()
     print(f"model service: {config.MODEL_BASE_URL}  LLM_MODEL={config.LLM_MODEL}")
     try:
+        wait_for_service(c)
         deadline = time.time() + 300
         while True:
             h = step("health", c.health)

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api import deps, serialize
+from api import access, deps, serialize
 from core import db
 from core.answer import assemble
 from core.llm.client import ModelUnavailable
@@ -79,7 +79,8 @@ def _step_of(label: str) -> int:
 
 
 @router.post("/chats/{chat_id}/ask")
-async def ask(chat_id: str, body: Ask, conn: sqlite3.Connection = Depends(deps.conn_dep)) -> StreamingResponse:
+async def ask(chat_id: str, body: Ask, conn: sqlite3.Connection = Depends(deps.conn_dep),
+              _limit: None = Depends(access.limit_ask)) -> StreamingResponse:
     chat = db.get_chat(conn, chat_id)
     if chat is None:
         raise HTTPException(404, "chat not found")
@@ -92,6 +93,10 @@ async def ask(chat_id: str, body: Ask, conn: sqlite3.Connection = Depends(deps.c
         wconn = db.connect()
         try:
             events.put(("stage", {"step": 0, "total": len(STEPS), "label": "Waiting for the model", "key": "Waiting"}))
+            if deps.passive_health():
+                deps.wake_model(lambda: events.put(("stage", {
+                    "step": 0, "total": len(STEPS), "key": "Waiting",
+                    "label": "Waking the model: after a quiet spell this takes about 3 minutes"})))
             with deps.ANSWER_LOCK:
                 def on_stage(label: str) -> None:
                     key = next((s for s in STEPS if label.startswith(s)), "Done")
@@ -99,11 +104,13 @@ async def ask(chat_id: str, body: Ask, conn: sqlite3.Connection = Depends(deps.c
                                           "label": PLAIN.get(key, "Done")}))
                 assemble.answer(wconn, question, chat_id, as_of=chat.as_of_date, client=deps.get_model(),
                                 retriever=deps.get_retriever(), on_stage=on_stage)
+            deps.MODEL_STATUS.ok()
             last = db.list_messages(wconn, chat_id)[-1]
             events.put(("answer", {"user": serialize.message_out(wconn, db.list_messages(wconn, chat_id)[-2]),
                                    "assistant": serialize.message_out(wconn, last),
                                    "chat": chat_out(db.get_chat(wconn, chat_id))}))  # type: ignore[arg-type]
         except ModelUnavailable:
+            deps.MODEL_STATUS.fail()
             events.put(("error", {"message": "The model is not reachable right now. Please try again in a moment."}))
         except Exception as e:  # noqa: BLE001 - report any failure to the client instead of hanging the stream
             events.put(("error", {"message": f"Something went wrong: {type(e).__name__}"}))

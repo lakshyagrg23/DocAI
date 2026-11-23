@@ -9,3 +9,7 @@ __pycache__/
 corpus/pdfs/
 svc.log
 tessdata/
+corpus/heldout/
+data_heldout/
+svc.err.log
+.access_code

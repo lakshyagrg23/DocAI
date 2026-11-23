@@ -160,7 +160,7 @@ export interface OutlineClause {
 }
 
 export interface Health {
-  state: 'ready' | 'warming' | 'offline'
+  state: 'ready' | 'warming' | 'asleep' | 'offline'
   label: string
 }
 

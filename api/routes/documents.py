@@ -5,10 +5,10 @@ import re
 import sqlite3
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 
-from api import deps, serialize
+from api import access, deps, serialize
 from core import config, versions
 from core.ingest import pipeline
 from core.render import highlight
@@ -44,13 +44,19 @@ def list_documents(conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[di
 
 
 @router.post("/documents", status_code=202)
-async def upload(files: list[UploadFile], conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
+async def upload(request: Request, files: list[UploadFile],
+                 conn: sqlite3.Connection = Depends(deps.conn_dep)) -> list[dict]:
+    access.limit_upload(request, len(files))
     dest_dir = config.DATA_DIR / "uploads"
     dest_dir.mkdir(parents=True, exist_ok=True)
     out = []
     for f in files:
         name = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(f.filename or "upload.pdf").name)
+        if f.size is not None and f.size > access.UPLOAD_MAX_BYTES:
+            raise HTTPException(413, f"{name} is larger than {access.UPLOAD_MAX_BYTES // (1024 * 1024)} MB")
         data = await f.read()
+        if len(data) > access.UPLOAD_MAX_BYTES:
+            raise HTTPException(413, f"{name} is larger than {access.UPLOAD_MAX_BYTES // (1024 * 1024)} MB")
         if not name.lower().endswith(".pdf") or not data.startswith(b"%PDF"):
             raise HTTPException(422, f"{name} is not a PDF file")
         dest = dest_dir / name

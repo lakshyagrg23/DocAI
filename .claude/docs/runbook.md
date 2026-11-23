@@ -130,6 +130,18 @@ modal deploy deploy/modal_app_ui.py                # prints the public app URL â
 `deploy/modal_app_ui.py`: debian_slim + `apt_install("tesseract-ocr","tesseract-ocr-hin")` + `requirements.txt`;
 Volume `docai-data` at `/data` (`DATA_DIR=/data`); runs `uvicorn api.main:app --host 0.0.0.0 --port 8000` (serving `web/dist`, built into the image) under `@modal.web_server(8000)`; a single container (`max_containers=1`, because SQLite).
 
+### 3.4b Modal notes (learned in M8)
+
+- Secrets: `docai-token` holds `MODEL_API_KEY` for the model service; `docai-ui` holds `MODEL_BASE_URL` and `MODEL_API_KEY` for the app. Put the same key in your local `.env`.
+- Seed the data: stage a folder with `corpus.db` (SQLite backup, chats cleared), `index/` and `uploads/` (the demo PDFs), then `modal volume put docai-data <folder> /seed`. On Windows Git Bash set `MSYS_NO_PATHCONV=1` or `/seed` becomes a Windows path. The app copies `/state` (else `/seed`) to local disk at start and syncs back every 45 s. To force a re-seed, `modal volume rm -r docai-data /state --yes`, then redeploy.
+- First GPU start takes minutes (GPU wait, Ollama start, model load); a 303 redirect means "still starting", clients must follow it (`ModelClient` does). `scripts/smoke.py` waits.
+- Any open browser tab of the app polls the model `/health`, which starts the GPU container. Stop the GPU app when not in use: `modal app stop docai-model --yes`; bring it back with `modal deploy model_service/modal_app.py`.
+
+### 3.4c Access code (ADR-021)
+
+The public app asks for a shared access code. It is the key `ACCESS_CODE` in the `docai-ui` secret; the local copy is the git-ignored file `.access_code`.
+Change or set it by re-creating the secret with all three keys: `modal secret create docai-ui MODEL_BASE_URL=<model url> MODEL_API_KEY=<key> ACCESS_CODE=<code> --force`, then `modal deploy deploy/modal_app_ui.py`. Everyone is signed out when it changes. Leave `ACCESS_CODE` unset locally. Limits are in `api/access.py` (env `ASK_PER_HOUR`, `ASK_PER_DAY_TOTAL`, `UPLOAD_PER_HOUR`).
+
 ### 3.5 Judging window and cost control
 
 - Before judging: `KEEP_WARM=1 modal deploy model_service/modal_app.py` and the same for the UI (sets `min_containers=1`),

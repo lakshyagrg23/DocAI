@@ -3,6 +3,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ChatPage } from '@/chat/ChatPage'
+import { AccessGate } from '@/layout/AccessGate'
 import { AppShell } from '@/layout/AppShell'
 import { AmendmentsPage } from '@/pages/Amendments'
 import { ConflictsPage } from '@/pages/Conflicts'
@@ -16,6 +17,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5_
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
+      <AccessGate>
       <UiProvider>
         <TooltipProvider delayDuration={150}>
           <BrowserRouter>
@@ -32,6 +34,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           </BrowserRouter>
         </TooltipProvider>
       </UiProvider>
+      </AccessGate>
     </QueryClientProvider>
   </React.StrictMode>,
 )
