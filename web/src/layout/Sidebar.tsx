@@ -8,7 +8,9 @@ import { useMemo, useState } from 'react'
 import { NavLink, useMatch, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 import { groupByDay } from '@/lib/plain'
+import { useLang } from '@/state/i18n'
 import type { Chat } from '@/lib/types'
 import { useUi } from '@/state/ui'
 import { workspacePath, workspacesQuery } from '@/state/workspace'
@@ -157,6 +159,19 @@ function ChatRow({ chat, workspaceId, active }: { chat: Chat; workspaceId: strin
   )
 }
 
+/** English / Hindi switch for the interface; answers follow it (a Hindi interface asks for Hindi answers). */
+function LangToggle() {
+  const { lang, setLang } = useLang()
+  const next = lang === 'hi' ? 'en' : 'hi'
+  return (
+    <Tooltip content={lang === 'hi' ? 'Switch to English' : 'हिन्दी में बदलें'}>
+      <Button size="icon" variant="ghost" onClick={() => setLang(next)} aria-label={t('Language')} className="text-xs font-semibold">
+        {lang === 'hi' ? 'EN' : 'हि'}
+      </Button>
+    </Tooltip>
+  )
+}
+
 export function Sidebar() {
   const { sidebarOpen, toggleSidebar, theme, toggleTheme } = useUi()
   const navigate = useNavigate()
@@ -184,14 +199,15 @@ export function Sidebar() {
         {wid && <Tooltip content="New chat" side="right"><Button size="icon" variant="ghost" onClick={() => navigate(workspacePath(wid))} aria-label="New chat"><Plus className="h-5 w-5" /></Button></Tooltip>}
         <div className="my-2 h-px w-6 bg-line" />
         {nav.map(({ to, label, icon: Icon }) => (
-          <Tooltip key={to} content={label} side="right">
-            <NavLink to={to} aria-label={label} className={({ isActive }) => cn('rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink', isActive && 'bg-sunken text-ink')}>
+          <Tooltip key={to} content={t(label)} side="right">
+            <NavLink to={to} aria-label={t(label)} className={({ isActive }) => cn('rounded-lg p-2 text-muted hover:bg-sunken hover:text-ink', isActive && 'bg-sunken text-ink')}>
               <Icon className="h-5 w-5" />
             </NavLink>
           </Tooltip>
         ))}
         <div className="mt-auto flex flex-col items-center gap-3">
           <ModelStatus compact />
+          <LangToggle />
           <Button size="icon" variant="ghost" onClick={toggleTheme} aria-label="Toggle dark mode">{theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</Button>
         </div>
       </aside>
@@ -233,7 +249,7 @@ export function Sidebar() {
         {wid && groups.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">{query ? 'No chats match your search.' : 'Chats in this workspace will appear here.'}</p>}
         {wid && groups.map(([label, items]) => (
           <div key={label}>
-            <p className="px-3 pb-1 text-xs font-semibold text-muted">{label}</p>
+            <p className="px-3 pb-1 text-xs font-semibold text-muted">{t(label)}</p>
             <div className="space-y-0.5">
               {(items as Chat[]).map((c) => <ChatRow key={c.chat_id} chat={c} workspaceId={wid} active={chatMatch?.params.chatId === c.chat_id} />)}
             </div>
@@ -244,12 +260,13 @@ export function Sidebar() {
       <div className="space-y-1 border-t border-line p-3">
         {nav.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className={navLinkClass}>
-            <Icon className="h-4 w-4" /> {label}
+            <Icon className="h-4 w-4" /> {t(label)}
           </NavLink>
         ))}
         <NavLink to="/workspaces" className={navLinkClass}><LayoutGrid className="h-4 w-4" /> All workspaces</NavLink>
         <div className="flex items-center justify-between px-3 pt-2">
           <ModelStatus />
+          <LangToggle />
           <Tooltip content={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <Button size="icon" variant="ghost" onClick={toggleTheme} aria-label="Toggle dark mode">{theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
           </Tooltip>

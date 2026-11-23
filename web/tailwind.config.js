@@ -7,7 +7,7 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
-      fontFamily: { sans: ['"Inter Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+      fontFamily: { sans: ['"Inter Variable"', '"Noto Sans Devanagari"', '"Nirmala UI"', 'Mangal', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
       colors: {
         bg: v('bg'), surface: v('surface'), sunken: v('sunken'), line: v('line'), ink: v('ink'), muted: v('muted'),
         accent: { DEFAULT: v('accent'), soft: v('accent-soft'), ink: v('accent-ink') },

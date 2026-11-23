@@ -56,6 +56,7 @@ export interface Claim {
   text: string
   span_ids: string[]
   verdict: 'supported' | 'unsupported' | 'contradicted'
+  text_local?: string | null  // number-guarded Hindi wording; `text` stays the verified English
   checks: Checks
   reason: string | null
 }
@@ -111,8 +112,10 @@ export interface Chain {
 export interface Calculation {
   kind: string
   formula?: string
-  inputs: { name: string; value: number; span_id?: string; source?: string }[]
+  formula_local?: string
+  inputs: { name: string; name_local?: string; value: number; span_id?: string; source?: string }[]
   steps: string[]
+  steps_local?: string[]
   result: number | null
   unit?: string
 }
@@ -120,12 +123,14 @@ export interface Calculation {
 export interface Answer {
   status: AnswerStatus
   question: string
+  language?: string
   as_of_date: string
   intent: string
   claims: Claim[]
   blocked_claims: Claim[]
   disagreements: Disagreement[]
   missing_evidence: string[]
+  missing_local?: string[]
   chains: Chain[]
   calculation: Calculation | null
   faithfulness_pct: number | null

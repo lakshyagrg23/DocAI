@@ -80,7 +80,7 @@ def test_make_plan_uses_llm_then_falls_back():
             return QueryPlan(intent="multi", sub_questions=["s1", "s2"])
 
     plan, version = make_plan("hello", Good())
-    assert plan.intent == "multi" and version == "v1"
+    assert plan.intent == "multi" and version == "v2"
     plan, version = make_plan("hello", StubClient())  # StubClient.chat_json raises ModelUnavailable
     assert plan.sub_questions == ["hello"] and version == "none"
     with pytest.raises(ModelUnavailable):
