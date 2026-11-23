@@ -22,8 +22,15 @@ def _fact(conn: sqlite3.Connection, fact_id: str) -> sqlite3.Row | None:
                         (fact_id,)).fetchone()
 
 
-def conflicts_in_effect(conn: sqlite3.Connection, clause_ids: list[str], as_of: str) -> list[tuple[sqlite3.Row, str]]:
+def _doc_of(conn: sqlite3.Connection, clause_id: str) -> str | None:
+    r = conn.execute("SELECT doc_id FROM clauses WHERE clause_id=?", (clause_id,)).fetchone()
+    return r["doc_id"] if r else None
+
+
+def conflicts_in_effect(conn: sqlite3.Connection, clause_ids: list[str], as_of: str,
+                        doc_scope: list[str] | None = None) -> list[tuple[sqlite3.Row, str]]:
     """Stored conflicts touching these clauses that apply at `as_of` and whose other side is in force.
+    With a document scope, only conflicts between two selected documents count.
     Returns (conflict, which side ('a'|'b') belongs to the given clause)."""
     if not clause_ids:
         return []
@@ -37,6 +44,8 @@ def conflicts_in_effect(conn: sqlite3.Connection, clause_ids: list[str], as_of: 
         if not _in_effect(r, as_of):
             continue
         if versions.status(conn, r["ca"], as_of) != "in_force" or versions.status(conn, r["cb"], as_of) != "in_force":
+            continue
+        if doc_scope and not {_doc_of(conn, r["ca"]), _doc_of(conn, r["cb"])} <= set(doc_scope):
             continue
         if r["ca"] in clause_ids:
             out.append((r, "a"))
@@ -59,7 +68,8 @@ def asserts_disputed(claim_text: str, differing_side: list) -> bool:
     return any(isinstance(d, bool) for d in differing_side) or any(isinstance(d, str) and d != "nil" for d in differing_side)
 
 
-def mark_contradicted(conn: sqlite3.Connection, claims: list[VerifiedClaim], as_of: str) -> None:
+def mark_contradicted(conn: sqlite3.Connection, claims: list[VerifiedClaim], as_of: str,
+                      doc_scope: list[str] | None = None) -> None:
     """Lookup (§5.1): supported claims that assert a disputed value become `contradicted`."""
     for c in claims:
         if c.verdict != "supported":
@@ -68,7 +78,7 @@ def mark_contradicted(conn: sqlite3.Connection, claims: list[VerifiedClaim], as_
         span_facts = {r["fact_id"] for r in conn.execute(
             f"SELECT fact_id FROM facts WHERE span_id IN ({','.join('?' * len(c.span_ids))})", c.span_ids)} if c.span_ids else set()
         hits = []
-        for row, side in conflicts_in_effect(conn, clause_ids, as_of):
+        for row, side in conflicts_in_effect(conn, clause_ids, as_of, doc_scope):
             fact_id = row["fact_a"] if side == "a" else row["fact_b"]
             if fact_id in span_facts and asserts_disputed(c.text, json.loads(row["differing"] or "{}").get(side, [])):
                 hits.append(row["conflict_id"])
@@ -123,22 +133,25 @@ def cards_from_ids(conn: sqlite3.Connection, ids: list[str], as_of: str) -> list
     return list(by_subject.values())
 
 
-def conflict_partners(conn: sqlite3.Connection, clause_ids: list[str], as_of: str) -> list[str]:
+def conflict_partners(conn: sqlite3.Connection, clause_ids: list[str], as_of: str,
+                      doc_scope: list[str] | None = None) -> list[str]:
     """In-force clauses on the other side of a conflict in effect: the answer must show both sides."""
     partners: list[str] = []
-    for row, side in conflicts_in_effect(conn, clause_ids, as_of):
+    for row, side in conflicts_in_effect(conn, clause_ids, as_of, doc_scope):
         other = row["cb"] if side == "a" else row["ca"]
         if other not in clause_ids and other not in partners:
             partners.append(other)
     return partners
 
 
-def add_partners(conn: sqlite3.Connection, pack: EvidencePack, as_of: str) -> list[str]:
+def add_partners(conn: sqlite3.Connection, pack: EvidencePack, as_of: str, doc_scope: list[str] | None = None) -> list[str]:
     """Append the partner clauses' spans to the pack (they were not retrieved, but they are the other half of a conflict)."""
     have = {s.clause_id for s in pack.spans}
     added = []
-    for cid in conflict_partners(conn, sorted(have), as_of):
+    for cid in conflict_partners(conn, sorted(have), as_of, doc_scope):
         for sp in _load_spans(conn, cid, 0.0, "in_force"):
+            if doc_scope and sp.doc_id not in doc_scope:
+                continue  # the user limited this chat to some documents
             pack.spans.append(sp)
             pack.tokens += approx_tokens(sp.line)
         added.append(cid)

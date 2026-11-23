@@ -113,7 +113,7 @@ Read: design/ingest.md §OCR, design/answering.md §5
 ### M10 — P2: Hindi, doc scope, export
 Read: design/answering.md §6, design/ui.md
 - [ ] Hindi detect/translate + number guard + UI strings → q40 passes
-- [ ] per-chat document scope; Markdown export
+- [x] per-chat document scope; Markdown export (ADR-023)
 **Done when:** q40 passes; re-deploy.
 
 ---

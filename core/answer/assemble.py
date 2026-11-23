@@ -18,7 +18,7 @@ from core.answer.plan import effective_as_of, make_plan, search_queries
 from core.answer.verify import verify_claims
 from core.llm.client import ModelClient, get_client
 from core.models import AnswerJSON
-from core.retrieval.evidence import build_pack
+from core.retrieval.evidence import build_pack, restrict
 from core.retrieval.hybrid import Retriever
 
 Stage = Callable[[str], None]
@@ -47,10 +47,11 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
 
     stage("Retrieving")
     t0 = time.perf_counter()
-    hits = retriever.retrieve(search_queries(plan, question), chat.doc_scope if chat else None)
-    pack = build_pack(conn, hits, as_of_date)
+    scope = chat.doc_scope if chat else None
+    hits = retriever.retrieve(search_queries(plan, question), scope)
+    pack = restrict(build_pack(conn, hits, as_of_date), scope)  # amendment versions can live in other documents
     disagree.recheck(conn, sorted({s.clause_id for s in pack.spans}))
-    disagree.add_partners(conn, pack, as_of_date)  # the other half of any conflict in effect must be shown too
+    disagree.add_partners(conn, pack, as_of_date, scope)  # the other half of any conflict in effect must be shown too
     timings["retrieve"] = _ms(t0)
 
     claims, missing = [], []
@@ -68,7 +69,7 @@ def answer(conn: sqlite3.Connection, question: str, chat_id: str | None = None, 
             t0 = time.perf_counter()
             claims = verify_claims(draft.claims, pack, client, question)
             stage("Checking conflicts")
-            disagree.mark_contradicted(conn, claims, as_of_date)
+            disagree.mark_contradicted(conn, claims, as_of_date, scope)
             timings["verify"] = _ms(t0)
     else:
         missing = ["No relevant passages were found in the uploaded documents"]

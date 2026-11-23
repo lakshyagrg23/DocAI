@@ -40,8 +40,9 @@ export const api = {
   examples: () => request<Example[]>('/examples'),
   chats: () => request<Chat[]>('/chats'),
   createChat: () => request<Chat>('/chats', json('POST')),
-  patchChat: (id: string, body: Partial<Pick<Chat, 'title' | 'as_of_date' | 'language'>>) =>
+  patchChat: (id: string, body: Partial<Pick<Chat, 'title' | 'as_of_date' | 'language'>> & { doc_scope?: string[] }) =>
     request<Chat>(`/chats/${id}`, json('PATCH', body)),
+  exportUrl: (id: string) => `/api/chats/${id}/export`,
   deleteChat: (id: string) => request<void>(`/chats/${id}`, json('DELETE')),
   messages: (id: string) => request<Message[]>(`/chats/${id}/messages`),
   documents: () => request<Doc[]>('/documents'),

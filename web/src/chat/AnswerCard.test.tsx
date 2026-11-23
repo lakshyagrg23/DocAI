@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -87,7 +88,11 @@ describe('AnswerCard (no proof)', () => {
 describe('Composer', () => {
   const setup = (busy = false) => {
     const onSend = vi.fn()
-    render(<TooltipProvider><Composer onSend={onSend} busy={busy} asOf="2026-11-23" today="2026-11-23" onAsOf={() => {}} /></TooltipProvider>)
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider><Composer onSend={onSend} busy={busy} asOf="2026-11-23" today="2026-11-23" onAsOf={() => {}} scope={null} onScope={() => {}} /></TooltipProvider>
+      </QueryClientProvider>,
+    )
     return onSend
   }
   it('sends on Enter and keeps Shift+Enter for new lines', async () => {
