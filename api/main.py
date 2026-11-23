@@ -36,8 +36,10 @@ def create_app() -> FastAPI:
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str) -> FileResponse:  # client-side routes fall back to index.html
-            target = DIST / path
-            return FileResponse(target if path and target.is_file() else DIST / "index.html")
+            # resolve first: "%2e%2e/" segments must not escape web/dist (this route is outside the access gate)
+            target = (DIST / path).resolve()
+            inside = target.is_relative_to(DIST.resolve())
+            return FileResponse(target if path and inside and target.is_file() else DIST / "index.html")
     return app
 
 

@@ -31,8 +31,10 @@ def sha256_file(path: Path | str) -> str:
     return h.hexdigest()
 
 
-def make_doc_id(filename: str, sha: str) -> str:
-    m = DEMO_NAME.match(filename)
+def make_doc_id(filename: str, sha: str, stable_ids: bool = True) -> str:
+    """D1_/H1_ file names keep a stable id, for trusted local ingest only. Uploads pass stable_ids=False: a visitor must
+    not be able to pick the id of (and so overwrite) an existing document by naming the file."""
+    m = DEMO_NAME.match(filename) if stable_ids else None
     return m.group(1).upper() if m else "U" + sha[:6]
 
 

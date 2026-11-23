@@ -85,6 +85,57 @@ def test_upload_limits(client, gated, monkeypatch):  # noqa: F811
     assert r.status_code == 413
 
 
+def test_spoofed_forwarded_for_does_not_dodge_the_login_limit(client, gated):  # noqa: F811
+    """The client writes the LEFT entries of X-Forwarded-For; only the proxy-appended right-hand entry counts."""
+    codes = [client.post("/api/login", json={"code": f"guess{i}"},
+                         headers={"x-forwarded-for": f"10.0.0.{i}, 198.51.100.7"}).status_code
+             for i in range(access.LOGIN_FAILS_PER_10MIN + 2)]
+    assert codes[-1] == 429
+
+
+def _raw_get(app, path: str) -> tuple[int, bytes]:
+    """GET with the path exactly as sent (an HTTP client may normalise '..' away; a raw request does not)."""
+    import asyncio
+
+    async def go():
+        scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "http",
+                 "path": path, "raw_path": path.encode(), "query_string": b"", "headers": [], "server": ("t", 80),
+                 "client": ("1.2.3.4", 1)}
+        out: list[dict] = []
+
+        sent_body = False
+
+        async def receive():
+            nonlocal sent_body
+            if not sent_body:
+                sent_body = True
+                return {"type": "http.request", "body": b"", "more_body": False}
+            await asyncio.sleep(3600)  # a real client stays connected: never answer with a disconnect or spin
+            return {"type": "http.disconnect"}
+
+        async def send(msg):
+            out.append(msg)
+
+        await app(scope, receive, send)
+        status = next(m["status"] for m in out if m["type"] == "http.response.start")
+        return status, b"".join(m.get("body", b"") for m in out if m["type"] == "http.response.body")
+
+    return asyncio.run(go())
+
+
+def test_static_route_cannot_escape_the_web_folder(client, gated):  # noqa: F811
+    from api.main import DIST
+    if not (DIST / "index.html").exists():
+        pytest.skip("web/dist is not built")
+    index = (DIST / "index.html").read_bytes()
+    secret = (DIST.parent.parent / "pyproject.toml").read_bytes()  # a real file outside web/dist
+    for p in ("/../../pyproject.toml", "/..%2f..%2fpyproject.toml", "/assets/../../../pyproject.toml"):
+        status, body = _raw_get(client.app, p)
+        assert body != secret, p
+    status, body = _raw_get(client.app, "/../../pyproject.toml")
+    assert status == 200 and body == index  # falls back to the login page
+
+
 def test_limiter_window():
     lim = access.Limiter()
     assert lim.allow("k", 2, 10, now=0) and lim.allow("k", 2, 10, now=1)

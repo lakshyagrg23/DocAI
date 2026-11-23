@@ -278,6 +278,7 @@ def test_build_spans_never_crosses_pages_and_keeps_offsets():
 def test_register_helpers():
     assert register.make_doc_id("D3_amendment_1.pdf", "abc") == "D3"
     assert register.make_doc_id("My file.pdf", "deadbeefcafe") == "Udeadbe"
+    assert register.make_doc_id("D1_evil.pdf", "deadbeefcafe", stable_ids=False) == "Udeadbe"  # uploads cannot claim D1
     assert register.normalise_date("15 January 2024") == "2024-01-15"
     assert register.normalise_date("June 2025") == "2025-06-01"
     assert register.normalise_date("03/04/2025") == "2025-04-03"  # DMY

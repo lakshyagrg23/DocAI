@@ -176,10 +176,12 @@ def test_upload_validates_pdfs_and_queues(client, monkeypatch, env):
     conn = env[0]
     job = conn.execute("SELECT job_id FROM ingest_jobs WHERE doc_id='D5'").fetchone()["job_id"]
     queued = []
-    monkeypatch.setattr("api.routes.documents.pipeline.enqueue", lambda path, c: queued.append(path) or job)
+    monkeypatch.setattr("api.routes.documents.pipeline.enqueue", lambda path, c, **kw: queued.append((path, kw)) or job)
     ok = client.post("/api/documents", files=[("files", ("../evil name.pdf", b"%PDF-1.4 fake", "application/pdf"))])
     assert ok.status_code == 202 and ok.json()[0]["doc_id"] == "D5"
-    assert queued and queued[0].parent.name == "uploads" and ".." not in queued[0].name  # sanitised file name
+    path, kw = queued[0]
+    assert path.parent.parent.name == "uploads" and ".." not in path.name  # sanitised file name, one folder per content
+    assert kw == {"stable_ids": False}  # an upload never picks its doc id from its file name
     bad = client.post("/api/documents", files=[("files", ("notes.pdf", b"hello", "application/pdf"))])
     assert bad.status_code == 422 and "not a PDF" in bad.json()["detail"]
 
